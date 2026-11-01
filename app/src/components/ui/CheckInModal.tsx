@@ -25,7 +25,9 @@ export function CheckInModal() {
   useEffect(() => {
     let timer: any;
     if (isVisible) {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      try {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      } catch (_) {}
       timer = setInterval(() => {
         decrementCountdown();
       }, 1000);

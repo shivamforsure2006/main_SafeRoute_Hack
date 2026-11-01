@@ -19,7 +19,9 @@ export function SOSButton({ size = 68 }: SOSButtonProps) {
   const startHold = () => {
     setIsPressing(true);
     setProgress(0);
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+    try {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+    } catch (_) {}
 
     const startTime = Date.now();
     const duration = 2000; // 2 seconds
@@ -33,7 +35,9 @@ export function SOSButton({ size = 68 }: SOSButtonProps) {
         clearInterval(intervalRef.current);
         setIsPressing(false);
         setProgress(100);
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        try {
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        } catch (_) {}
         triggerSOS('BUTTON_HOLD_2S');
       }
     }, 40);
