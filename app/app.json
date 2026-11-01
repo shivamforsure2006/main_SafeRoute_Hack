@@ -1,0 +1,71 @@
+{
+  "expo": {
+    "name": "SafeRoute Delhi",
+    "slug": "saferoute-delhi",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/icon.png",
+    "scheme": "saferoute",
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.saferoute.delhi",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "SafeRoute needs your location to calculate the safest walking and driving paths in Delhi.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "SafeRoute uses continuous background location to monitor your journey and detect unexpected deviations.",
+        "NSMicrophoneUsageDescription": "SafeRoute records a 10-second emergency audio clip when SOS is activated.",
+        "NSCameraUsageDescription": "SafeRoute takes an emergency photo to assist first responders when SOS is triggered.",
+        "NSContactsUsageDescription": "SafeRoute lets you select trusted emergency contacts directly from your phone address book."
+      }
+    },
+    "android": {
+      "package": "com.saferoute.delhi",
+      "adaptiveIcon": {
+        "backgroundColor": "#1b1f3b",
+        "foregroundImage": "./assets/images/icon.png"
+      },
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION",
+        "FOREGROUND_SERVICE",
+        "FOREGROUND_SERVICE_LOCATION",
+        "RECORD_AUDIO",
+        "CAMERA",
+        "READ_CONTACTS",
+        "VIBRATE",
+        "POST_NOTIFICATIONS"
+      ]
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "static"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "SafeRoute requires background location access to ensure your trip tracking survives screen lock."
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow SafeRoute to capture emergency photographic evidence during an SOS alert."
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/icon.png",
+          "color": "#3b4cca",
+          "sounds": []
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}

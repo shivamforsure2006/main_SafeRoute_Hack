@@ -1,0 +1,19 @@
+{
+  "name": "saferoute-delhi",
+  "version": "1.0.0",
+  "description": "SafeRoute: Safety-First Navigation & Personal Safety Mobile App for Delhi NCR",
+  "scripts": {
+    "dev": "concurrently -k -n \"BACKEND,APP\" -c \"blue,green\" \"npm run dev:backend\" \"npm run dev:app\"",
+    "dev:backend": "python -m uvicorn backend.app.main:app --host 0.0.0.0 --port 8000 --reload",
+    "dev:app": "cd app && npx expo start",
+    "test": "python -m pytest backend/tests/ -v && cd app && npx tsc --noEmit",
+    "test:backend": "python -m pytest backend/tests/ -v",
+    "test:app": "cd app && npx tsc --noEmit",
+    "seed": "python data/seed.py",
+    "fetch-osm": "python data/fetch_osm.py",
+    "build:apk": "cd app && npx eas-cli build -p android --profile preview"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}
