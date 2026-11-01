@@ -84,6 +84,10 @@ npx eas-cli build -p android --profile preview
 ```
 - When the build finishes (typically ~5-8 minutes), EAS outputs a direct download URL for the standalone `SafeRoute.apk`.
 
+> **Direct Android APK Download (Live Release)**:  
+> 📥 **[Download SafeRoute.apk](https://expo.dev/artifacts/eas/nAsYN3bs0mrFWZoSvK1YlyM-jyM1cW7h4EtgEtkGM5o.apk)**  
+> 🔗 **[EAS Build Page & QR Code](https://expo.dev/accounts/shivamforsure2006/projects/saferoute-delhi/builds/9f0ab8db-d19e-4048-8d40-ec4dc740727f)**
+
 ### 2. Local Gradle Build (If Android SDK + JDK 17 are installed)
 ```bash
 cd app
