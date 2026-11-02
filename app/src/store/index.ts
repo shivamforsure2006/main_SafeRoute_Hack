@@ -85,6 +85,7 @@ export interface TripState {
   batteryLevel: number;
   anomalyReason: string | null;
   checkInCountdown: number;
+  isGpsTracking: boolean;
 
   // Layer Toggles
   showStreetLights: boolean;
@@ -95,6 +96,8 @@ export interface TripState {
   // Actions
   setOrigin: (origin: { name: string; lat: number; lng: number }) => void;
   setDestination: (destination: { name: string; lat: number; lng: number }) => void;
+  swapOriginAndDestination: () => void;
+  setGpsTracking: (isTracking: boolean) => void;
   setTravelMode: (mode: 'walking' | 'driving') => void;
   toggleNightPreview: () => void;
   setRoutes: (routes: RouteAlternative[]) => void;
@@ -130,6 +133,7 @@ export const useTripStore = create<TripState>((set, get) => ({
   batteryLevel: 94,
   anomalyReason: null,
   checkInCountdown: 30,
+  isGpsTracking: false,
 
   showStreetLights: true,
   showOpenShops: true,
@@ -138,6 +142,17 @@ export const useTripStore = create<TripState>((set, get) => ({
 
   setOrigin: (origin) => set({ origin }),
   setDestination: (destination) => set({ destination }),
+  swapOriginAndDestination: () => {
+    const state = get();
+    const oldOrigin = state.origin;
+    const oldDest = state.destination;
+    set({
+      origin: oldDest,
+      destination: oldOrigin,
+      currentLocation: { lat: oldDest.lat, lng: oldDest.lng },
+    });
+  },
+  setGpsTracking: (isGpsTracking) => set({ isGpsTracking }),
   setTravelMode: (travelMode) => set({ travelMode }),
   toggleNightPreview: () => set((state) => ({ isNightPreview: !state.isNightPreview })),
   setRoutes: (routes) => {

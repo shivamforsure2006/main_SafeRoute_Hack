@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
-import { Play, Square, CornerDownRight, Hand, Zap, Activity } from 'lucide-react-native';
+import { Play, Square, CornerDownRight, Hand, Zap, Activity, ChevronDown, ChevronUp } from 'lucide-react-native';
 import { lightColors, darkColors } from '@/theme/tokens';
 import { useSimulatorStore } from '@/store/simulator';
 import { useUserStore } from '@/store';
@@ -8,6 +8,8 @@ import { useUserStore } from '@/store';
 export function SimulatorBar() {
   const isDarkMode = useUserStore((s) => s.isDarkMode);
   const colors = isDarkMode ? darkColors : lightColors;
+
+  const [isCollapsed, setIsCollapsed] = useState(false);
 
   const isActive = useSimulatorStore((s) => s.isActive);
   const speedMultiplier = useSimulatorStore((s) => s.speedMultiplier);
@@ -22,9 +24,15 @@ export function SimulatorBar() {
   return (
     <View style={[styles.container, { backgroundColor: isDarkMode ? colors.surface : '#1b1f3b' }]}>
       <View style={styles.topRow}>
-        <View style={styles.titleBadge}>
-          <Text style={styles.badgeText}>DEMO SIMULATOR</Text>
-        </View>
+        <TouchableOpacity
+          onPress={() => setIsCollapsed(!isCollapsed)}
+          style={styles.titleBadge}
+          accessibilityRole="button"
+          accessibilityLabel="Toggle simulator controls"
+        >
+          <Text style={styles.badgeText}>SIMULATOR</Text>
+          {isCollapsed ? <ChevronDown size={11} color="#ffffff" /> : <ChevronUp size={11} color="#ffffff" />}
+        </TouchableOpacity>
 
         <View style={styles.speedGroup}>
           {([1, 5, 10] as const).map((spd) => (
@@ -49,49 +57,51 @@ export function SimulatorBar() {
           accessibilityRole="button"
           accessibilityLabel={isActive ? 'Stop simulation' : 'Simulate walk'}
         >
-          {isActive ? <Square size={14} color="#ffffff" /> : <Play size={14} color="#ffffff" />}
-          <Text style={styles.playText}>{isActive ? 'Stop' : 'Simulate Walk'}</Text>
+          {isActive ? <Square size={13} color="#ffffff" /> : <Play size={13} color="#ffffff" />}
+          <Text style={styles.playText}>{isActive ? 'Stop' : 'Simulate'}</Text>
         </TouchableOpacity>
       </View>
 
-      {/* Simulator Trigger Buttons */}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.triggerRow}>
-        <TouchableOpacity
-          onPress={triggerDeviate}
-          style={[styles.triggerBtn, { borderColor: colors.caution }]}
-          accessibilityLabel="Simulate route deviation"
-        >
-          <CornerDownRight size={13} color={colors.caution} />
-          <Text style={[styles.triggerBtnText, { color: '#ffffff' }]}>Deviate &gt;150m</Text>
-        </TouchableOpacity>
+      {/* Simulator Trigger Buttons (collapsible) */}
+      {!isCollapsed && (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.triggerRow}>
+          <TouchableOpacity
+            onPress={triggerDeviate}
+            style={[styles.triggerBtn, { borderColor: colors.caution }]}
+            accessibilityLabel="Simulate route deviation"
+          >
+            <CornerDownRight size={13} color={colors.caution} />
+            <Text style={[styles.triggerBtnText, { color: '#ffffff' }]}>Deviate &gt;150m</Text>
+          </TouchableOpacity>
 
-        <TouchableOpacity
-          onPress={triggerStop3Min}
-          style={[styles.triggerBtn, { borderColor: colors.caution }]}
-          accessibilityLabel="Simulate 3 minute unusual stop"
-        >
-          <Hand size={13} color={colors.caution} />
-          <Text style={[styles.triggerBtnText, { color: '#ffffff' }]}>Stop 3 mins</Text>
-        </TouchableOpacity>
+          <TouchableOpacity
+            onPress={triggerStop3Min}
+            style={[styles.triggerBtn, { borderColor: colors.caution }]}
+            accessibilityLabel="Simulate 3 minute unusual stop"
+          >
+            <Hand size={13} color={colors.caution} />
+            <Text style={[styles.triggerBtnText, { color: '#ffffff' }]}>Stop 3 mins</Text>
+          </TouchableOpacity>
 
-        <TouchableOpacity
-          onPress={triggerSpeedSpike}
-          style={[styles.triggerBtn, { borderColor: colors.danger }]}
-          accessibilityLabel="Simulate speed jump"
-        >
-          <Zap size={13} color={colors.danger} />
-          <Text style={[styles.triggerBtnText, { color: '#ffffff' }]}>Speed Spike</Text>
-        </TouchableOpacity>
+          <TouchableOpacity
+            onPress={triggerSpeedSpike}
+            style={[styles.triggerBtn, { borderColor: colors.danger }]}
+            accessibilityLabel="Simulate speed jump"
+          >
+            <Zap size={13} color={colors.danger} />
+            <Text style={[styles.triggerBtnText, { color: '#ffffff' }]}>Speed Spike</Text>
+          </TouchableOpacity>
 
-        <TouchableOpacity
-          onPress={triggerShake}
-          style={[styles.triggerBtn, { borderColor: colors.danger }]}
-          accessibilityLabel="Simulate shake / fall spike"
-        >
-          <Activity size={13} color={colors.danger} />
-          <Text style={[styles.triggerBtnText, { color: '#ffffff' }]}>Shake / Fall</Text>
-        </TouchableOpacity>
-      </ScrollView>
+          <TouchableOpacity
+            onPress={triggerShake}
+            style={[styles.triggerBtn, { borderColor: colors.danger }]}
+            accessibilityLabel="Simulate shake / fall spike"
+          >
+            <Activity size={13} color={colors.danger} />
+            <Text style={[styles.triggerBtnText, { color: '#ffffff' }]}>Shake / Fall</Text>
+          </TouchableOpacity>
+        </ScrollView>
+      )}
     </View>
   );
 }

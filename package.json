@@ -5,10 +5,10 @@
   "scripts": {
     "dev": "concurrently -k -n \"BACKEND,APP\" -c \"blue,green\" \"npm run dev:backend\" \"npm run dev:app\"",
     "dev:backend": "python -m uvicorn backend.app.main:app --host 0.0.0.0 --port 8000 --reload",
-    "dev:app": "cd app && npx expo start",
-    "test": "python -m pytest backend/tests/ -v && cd app && npx tsc --noEmit",
+    "dev:app": "npm --prefix app start",
+    "test": "python -m pytest backend/tests/ -v && npm --prefix app run test:types",
     "test:backend": "python -m pytest backend/tests/ -v",
-    "test:app": "cd app && npx tsc --noEmit",
+    "test:app": "npm --prefix app run test:types",
     "seed": "python data/seed.py",
     "fetch-osm": "python data/fetch_osm.py",
     "build:apk": "cd app && npx eas-cli build -p android --profile preview"

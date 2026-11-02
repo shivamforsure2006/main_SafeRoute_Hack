@@ -9,6 +9,7 @@ import {
   SafeAreaView,
   ActivityIndicator,
   Keyboard,
+  Platform,
 } from 'react-native';
 import {
   Search,
@@ -20,6 +21,15 @@ import {
   Compass,
   ArrowRight,
   ShieldAlert,
+  ArrowUpDown,
+  Locate,
+  LocateFixed,
+  X,
+  Crosshair,
+  Navigation,
+  Maximize2,
+  Minimize2,
+  StopCircle,
 } from 'lucide-react-native';
 import { SafeMapView } from '@/components/Map/SafeMapView';
 import { RouteCard } from '@/components/ui/RouteCard';
@@ -30,6 +40,7 @@ import { CheckInModal } from '@/components/ui/CheckInModal';
 import { CalmSOSModal } from '@/components/ui/CalmSOSModal';
 import { SimulatorBar } from '@/components/ui/SimulatorBar';
 import { useShakeDetection } from '@/hooks/useShakeDetection';
+import { useLocationTracking } from '@/hooks/useLocationTracking';
 import { lightColors, darkColors, themeTokens } from '@/theme/tokens';
 import { useTripStore, useUserStore } from '@/store';
 import { api, RouteAlternative } from '@/services/api';
@@ -49,25 +60,49 @@ export default function MapScreen() {
   const routes = useTripStore((s) => s.routes);
   const selectedRoute = useTripStore((s) => s.selectedRoute);
   const currentLocation = useTripStore((s) => s.currentLocation);
+  const currentSpeed = useTripStore((s) => s.currentSpeed);
 
   const setOrigin = useTripStore((s) => s.setOrigin);
   const setDestination = useTripStore((s) => s.setDestination);
+  const swapOriginAndDestination = useTripStore((s) => s.swapOriginAndDestination);
   const setTravelMode = useTripStore((s) => s.setTravelMode);
   const toggleNightPreview = useTripStore((s) => s.toggleNightPreview);
   const setRoutes = useTripStore((s) => s.setRoutes);
   const selectRoute = useTripStore((s) => s.selectRoute);
   const startTrip = useTripStore((s) => s.startTrip);
+  const endTrip = useTripStore((s) => s.endTrip);
 
-  const [searchQuery, setSearchQuery] = useState('');
+  // Real-time GPS location tracking hook
+  const {
+    isLocating,
+    isGpsTracking,
+    setOriginToGps,
+    toggleTracking,
+    getCurrentLocation,
+  } = useLocationTracking();
+
+  // Search & input state for both Origin (From) and Destination (To)
+  const [originInput, setOriginInput] = useState(origin.name);
+  const [destInput, setDestInput] = useState(destination.name);
+  const [activeField, setActiveField] = useState<'origin' | 'destination' | null>(null);
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [breakdownRoute, setBreakdownRoute] = useState<RouteAlternative | null>(null);
-  const [layerMenuOpen, setLayerMenuOpen] = useState(false);
+  const [hudCollapsed, setHudCollapsed] = useState(false);
 
   // Activate hardware accelerometer shake detection
   useShakeDetection();
 
-  // Load default routes on mount (Connaught Place to India Gate)
+  // Keep text inputs in sync with store state
+  useEffect(() => {
+    setOriginInput(origin.name);
+  }, [origin.name]);
+
+  useEffect(() => {
+    setDestInput(destination.name);
+  }, [destination.name]);
+
+  // Load default routes on mount or mode change
   useEffect(() => {
     fetchRoutes(origin, destination, travelMode, isNightPreview);
   }, [travelMode, isNightPreview]);
@@ -84,160 +119,516 @@ export default function MapScreen() {
     setIsSearching(false);
   };
 
-  const handleSearchSubmit = async () => {
-    if (!searchQuery.trim()) return;
-    Keyboard.dismiss();
-    setIsSearching(true);
-    const results = await api.geocodeSearch(searchQuery);
-    setSearchResults(results);
-    setIsSearching(false);
+  // Handle typing in origin or destination search
+  const handleTextChange = async (text: string, field: 'origin' | 'destination') => {
+    if (field === 'origin') {
+      setOriginInput(text);
+    } else {
+      setDestInput(text);
+    }
+    setActiveField(field);
 
-    if (results.length > 0) {
-      const top = results[0];
-      setDestination({ name: top.name, lat: top.lat, lng: top.lng });
-      fetchRoutes(origin, { lat: top.lat, lng: top.lng }, travelMode, isNightPreview);
+    if (text.trim().length >= 2) {
+      setIsSearching(true);
+      const results = await api.geocodeSearch(text);
+      setSearchResults(results);
+      setIsSearching(false);
+    } else {
       setSearchResults([]);
     }
   };
 
-  const setPresetDestination = (name: string, lat: number, lng: number) => {
-    setDestination({ name, lat, lng });
-    fetchRoutes(origin, { lat, lng }, travelMode, isNightPreview);
-    setSearchQuery('');
+  // Submit search from keyboard
+  const handleSearchSubmit = async (field: 'origin' | 'destination') => {
+    Keyboard.dismiss();
+    const query = field === 'origin' ? originInput : destInput;
+    if (!query.trim()) return;
+
+    setIsSearching(true);
+    const results = await api.geocodeSearch(query);
+    setIsSearching(false);
+
+    if (results.length > 0) {
+      handleSelectPlace(results[0], field);
+    }
+  };
+
+  // Select place from autocomplete results
+  const handleSelectPlace = (place: { name: string; lat: number; lng: number }, fieldOverride?: 'origin' | 'destination') => {
+    Keyboard.dismiss();
+    const targetField = fieldOverride || activeField;
+
+    if (targetField === 'origin') {
+      const newOrigin = { name: place.name, lat: place.lat, lng: place.lng };
+      setOrigin(newOrigin);
+      setOriginInput(place.name);
+      fetchRoutes({ lat: place.lat, lng: place.lng }, destination, travelMode, isNightPreview);
+    } else {
+      const newDest = { name: place.name, lat: place.lat, lng: place.lng };
+      setDestination(newDest);
+      setDestInput(place.name);
+      fetchRoutes(origin, { lat: place.lat, lng: place.lng }, travelMode, isNightPreview);
+    }
+
+    setActiveField(null);
+    setSearchResults([]);
+  };
+
+  // Use GPS to set origin to device location
+  const handleUseGpsAsOrigin = async () => {
+    Keyboard.dismiss();
+    setActiveField(null);
+    setSearchResults([]);
+
+    const loc = await setOriginToGps();
+    if (loc) {
+      setOriginInput(loc.name);
+      fetchRoutes({ lat: loc.lat, lng: loc.lng }, destination, travelMode, isNightPreview);
+    }
+  };
+
+  // Swap origin and destination
+  const handleSwap = () => {
+    Keyboard.dismiss();
+    setActiveField(null);
+    setSearchResults([]);
+
+    const oldOrigin = origin;
+    const oldDest = destination;
+    swapOriginAndDestination();
+
+    setOriginInput(oldDest.name);
+    setDestInput(oldOrigin.name);
+
+    fetchRoutes(oldDest, oldOrigin, travelMode, isNightPreview);
+  };
+
+  // Handle Preset selection
+  const handleSelectPreset = (name: string, lat: number, lng: number) => {
+    Keyboard.dismiss();
+    if (activeField === 'origin') {
+      setOrigin({ name, lat, lng });
+      setOriginInput(name);
+      fetchRoutes({ lat, lng }, destination, travelMode, isNightPreview);
+    } else {
+      setDestination({ name, lat, lng });
+      setDestInput(name);
+      fetchRoutes(origin, { lat, lng }, travelMode, isNightPreview);
+    }
+    setActiveField(null);
+    setSearchResults([]);
   };
 
   const isTripActive = status === 'ACTIVE';
+  const durationMin = selectedRoute ? Math.ceil(selectedRoute.duration_s / 60) : 0;
+  const distanceKm = selectedRoute ? (selectedRoute.distance_m / 1000).toFixed(1) : '0.0';
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.paper }]}>
-      {/* Top Search & Controls Bar */}
+      {/* Top Header / Controls Bar */}
       <View style={[styles.topControls, { backgroundColor: colors.surface, borderBottomColor: colors.line }]}>
-        <View style={[styles.searchBar, { backgroundColor: colors.surfaceSubtle, borderColor: colors.line }]}>
-          <Search size={18} color={colors.muted} />
-          <TextInput
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            onSubmitEditing={handleSearchSubmit}
-            placeholder={t.search_placeholder}
-            placeholderTextColor={colors.muted}
-            style={[styles.searchInput, { color: colors.ink }]}
-            returnKeyType="search"
-            accessibilityLabel="Destination search in Delhi"
-          />
-          {isSearching && <ActivityIndicator size="small" color={colors.signal} />}
-        </View>
+        
+        {isTripActive ? (
+          /* ACTIVE TRAVELLING NAVIGATION HEADER - Maximum Map Visibility */
+          <View style={[styles.navHeaderCard, { backgroundColor: colors.surfaceSubtle, borderColor: colors.line }]}>
+            <View style={styles.navHeaderRow}>
+              <View style={[styles.navModeIconBox, { backgroundColor: colors.surface }]}>
+                {travelMode === 'walking' ? (
+                  <Footprints size={18} color={colors.signal} />
+                ) : (
+                  <Car size={18} color={colors.signal} />
+                )}
+              </View>
 
-        {/* Quick Toggles: Night preview, Walking/Driving */}
-        <View style={styles.quickToggleRow}>
-          <View style={styles.modeGroup}>
-            <TouchableOpacity
-              onPress={() => setTravelMode('walking')}
-              style={[
-                styles.modeBtn,
-                travelMode === 'walking' && { backgroundColor: colors.ink },
-              ]}
-              accessibilityRole="button"
-              accessibilityLabel="Walking mode"
-            >
-              <Footprints size={14} color={travelMode === 'walking' ? '#ffffff' : colors.muted} />
-              <Text style={[styles.modeBtnText, { color: travelMode === 'walking' ? '#ffffff' : colors.muted }]}>
-                {t.walking}
-              </Text>
-            </TouchableOpacity>
+              <View style={styles.navHeaderTextCol}>
+                <View style={styles.navLiveBadgeRow}>
+                  <View style={[styles.liveDotPill, { backgroundColor: colors.signal }]} />
+                  <Text style={[styles.navLiveText, { color: colors.signal }]}>
+                    {isGpsTracking ? 'LIVE GPS NAVIGATION' : 'TRAVELLING (ACTIVE)'}
+                  </Text>
+                  <View style={[styles.navSpeedBadge, { backgroundColor: colors.surface }]}>
+                    <Text style={[styles.navSpeedText, { color: colors.ink }]}>
+                      {(currentSpeed * 3.6).toFixed(1)} km/h
+                    </Text>
+                  </View>
+                </View>
+                <Text style={[styles.navDestTitle, { color: colors.ink }]} numberOfLines={1}>
+                  ➔ {destination.name}
+                </Text>
+                <Text style={[styles.navOriginSub, { color: colors.muted }]} numberOfLines={1}>
+                  From {origin.name}
+                </Text>
+              </View>
 
-            <TouchableOpacity
-              onPress={() => setTravelMode('driving')}
-              style={[
-                styles.modeBtn,
-                travelMode === 'driving' && { backgroundColor: colors.ink },
-              ]}
-              accessibilityRole="button"
-              accessibilityLabel="Driving mode"
-            >
-              <Car size={14} color={travelMode === 'driving' ? '#ffffff' : colors.muted} />
-              <Text style={[styles.modeBtnText, { color: travelMode === 'driving' ? '#ffffff' : colors.muted }]}>
-                {t.driving}
-              </Text>
-            </TouchableOpacity>
+              {/* Toggle Full Map vs HUD */}
+              <TouchableOpacity
+                onPress={() => setHudCollapsed(!hudCollapsed)}
+                style={[styles.collapseBtn, { backgroundColor: colors.surface, borderColor: colors.line }]}
+                accessibilityRole="button"
+                accessibilityLabel="Toggle navigation map view"
+              >
+                {hudCollapsed ? (
+                  <Maximize2 size={16} color={colors.ink} />
+                ) : (
+                  <Minimize2 size={16} color={colors.ink} />
+                )}
+              </TouchableOpacity>
+            </View>
           </View>
+        ) : (
+          /* Route Planning Mode - Dual Start (Origin) & Destination Input Card */
+          <>
+            <View style={[styles.routeCardContainer, { backgroundColor: colors.surfaceSubtle, borderColor: colors.line }]}>
+              {/* Start Location (Origin) Row */}
+              <View style={styles.inputRow}>
+                <View style={[styles.inputIconCircle, { backgroundColor: 'rgba(16, 185, 129, 0.15)' }]}>
+                  <Compass size={15} color={colors.safe} />
+                </View>
+                <TextInput
+                  value={originInput}
+                  onChangeText={(text) => handleTextChange(text, 'origin')}
+                  onFocus={() => setActiveField('origin')}
+                  onSubmitEditing={() => handleSearchSubmit('origin')}
+                  placeholder={t.origin_placeholder || 'Start location / GPS...'}
+                  placeholderTextColor={colors.muted}
+                  style={[styles.routeInput, { color: colors.ink }]}
+                  returnKeyType="search"
+                  selectTextOnFocus
+                  accessibilityLabel="Choose where you want to start"
+                />
+                {/* Quick GPS Button to set start to live location */}
+                <TouchableOpacity
+                  onPress={handleUseGpsAsOrigin}
+                  style={[styles.gpsActionBtn, isLocating && { opacity: 0.6 }]}
+                  accessibilityRole="button"
+                  accessibilityLabel="Use device GPS location as starting point"
+                >
+                  {isLocating ? (
+                    <ActivityIndicator size="small" color={colors.signal} />
+                  ) : (
+                    <Locate size={16} color={colors.signal} />
+                  )}
+                </TouchableOpacity>
+                {originInput.length > 0 && (
+                  <TouchableOpacity
+                    onPress={() => {
+                      setOriginInput('');
+                      setActiveField('origin');
+                    }}
+                    style={styles.clearBtn}
+                  >
+                    <X size={13} color={colors.muted} />
+                  </TouchableOpacity>
+                )}
+              </View>
 
-          <TouchableOpacity
-            onPress={toggleNightPreview}
-            style={[
-              styles.nightBtn,
-              {
-                backgroundColor: isNightPreview ? colors.cautionSubtle : colors.surfaceSubtle,
-                borderColor: isNightPreview ? colors.caution : colors.line,
-              },
-            ]}
-            accessibilityRole="button"
-            accessibilityLabel="Toggle night safety preview"
-          >
-            <Moon size={14} color={isNightPreview ? colors.caution : colors.muted} />
-            <Text style={[styles.nightText, { color: isNightPreview ? colors.caution : colors.muted }]}>
-              {t.night_preview}
-            </Text>
-          </TouchableOpacity>
-        </View>
+              {/* Divider with Swap Button */}
+              <View style={styles.swapDividerRow}>
+                <View style={[styles.dividerLine, { backgroundColor: colors.line }]} />
+                <TouchableOpacity
+                  onPress={handleSwap}
+                  style={[styles.swapBtn, { backgroundColor: colors.surface, borderColor: colors.line }]}
+                  accessibilityRole="button"
+                  accessibilityLabel={t.swap_locations || 'Swap start and destination'}
+                >
+                  <ArrowUpDown size={14} color={colors.ink} />
+                </TouchableOpacity>
+              </View>
 
-        {/* Preset Delhi Quick Destinations */}
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.presetsRow}>
-          <TouchableOpacity
-            onPress={() => setPresetDestination('India Gate, Rajpath', 28.6129, 77.2295)}
-            style={[styles.presetChip, { borderColor: colors.line }]}
-          >
-            <MapPin size={12} color={colors.signal} />
-            <Text style={[styles.presetChipText, { color: colors.ink }]}>India Gate</Text>
-          </TouchableOpacity>
+              {/* Destination Row */}
+              <View style={styles.inputRow}>
+                <View style={[styles.inputIconCircle, { backgroundColor: 'rgba(239, 68, 68, 0.15)' }]}>
+                  <MapPin size={15} color={colors.danger} />
+                </View>
+                <TextInput
+                  value={destInput}
+                  onChangeText={(text) => handleTextChange(text, 'destination')}
+                  onFocus={() => setActiveField('destination')}
+                  onSubmitEditing={() => handleSearchSubmit('destination')}
+                  placeholder={t.destination_placeholder || 'Where to (Destination)...'}
+                  placeholderTextColor={colors.muted}
+                  style={[styles.routeInput, { color: colors.ink }]}
+                  returnKeyType="search"
+                  selectTextOnFocus
+                  accessibilityLabel="Choose destination"
+                />
+                {destInput.length > 0 && (
+                  <TouchableOpacity
+                    onPress={() => {
+                      setDestInput('');
+                      setActiveField('destination');
+                    }}
+                    style={styles.clearBtn}
+                  >
+                    <X size={13} color={colors.muted} />
+                  </TouchableOpacity>
+                )}
+              </View>
+            </View>
 
-          <TouchableOpacity
-            onPress={() => setPresetDestination('Hauz Khas Village', 28.5489, 77.2058)}
-            style={[styles.presetChip, { borderColor: colors.line }]}
-          >
-            <MapPin size={12} color={colors.signal} />
-            <Text style={[styles.presetChipText, { color: colors.ink }]}>Hauz Khas</Text>
-          </TouchableOpacity>
+            {/* Autocomplete / Suggestions Dropdown */}
+            {activeField !== null && (
+              <View style={[styles.autocompleteSheet, { backgroundColor: colors.surface, borderColor: colors.line }]}>
+                {/* Top Option: Use GPS Location */}
+                {activeField === 'origin' && (
+                  <TouchableOpacity
+                    onPress={handleUseGpsAsOrigin}
+                    style={[styles.suggestionItem, { borderBottomColor: colors.line }]}
+                  >
+                    <View style={[styles.suggIconBox, { backgroundColor: 'rgba(59, 76, 202, 0.12)' }]}>
+                      {isLocating ? (
+                        <ActivityIndicator size="small" color={colors.signal} />
+                      ) : (
+                        <Locate size={16} color={colors.signal} />
+                      )}
+                    </View>
+                    <View style={styles.suggTextBox}>
+                      <Text style={[styles.suggTitle, { color: colors.signal, fontWeight: '700' }]}>
+                        {t.use_current_location || 'Use Current Location (GPS)'}
+                      </Text>
+                      <Text style={[styles.suggSub, { color: colors.muted }]}>
+                        Track GPS coordinates directly
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                )}
 
-          <TouchableOpacity
-            onPress={() => setPresetDestination('Connaught Place', 28.6328, 77.2197)}
-            style={[styles.presetChip, { borderColor: colors.line }]}
-          >
-            <MapPin size={12} color={colors.signal} />
-            <Text style={[styles.presetChipText, { color: colors.ink }]}>Connaught Place</Text>
-          </TouchableOpacity>
+                {/* Search results list */}
+                {searchResults.map((item, idx) => (
+                  <TouchableOpacity
+                    key={`sugg-${idx}`}
+                    onPress={() => handleSelectPlace(item)}
+                    style={[styles.suggestionItem, { borderBottomColor: colors.line }]}
+                  >
+                    <View style={[styles.suggIconBox, { backgroundColor: colors.surfaceSubtle }]}>
+                      <MapPin size={15} color={colors.muted} />
+                    </View>
+                    <View style={styles.suggTextBox}>
+                      <Text style={[styles.suggTitle, { color: colors.ink }]} numberOfLines={1}>
+                        {item.name}
+                      </Text>
+                      <Text style={[styles.suggSub, { color: colors.muted }]}>
+                        {item.type || 'Delhi NCR Landmark'}
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                ))}
 
-          <TouchableOpacity
-            onPress={() => setPresetDestination('Saket Select CITYWALK', 28.5285, 77.2185)}
-            style={[styles.presetChip, { borderColor: colors.line }]}
-          >
-            <MapPin size={12} color={colors.signal} />
-            <Text style={[styles.presetChipText, { color: colors.ink }]}>Saket</Text>
-          </TouchableOpacity>
-        </ScrollView>
+                {/* Dismiss search button */}
+                <TouchableOpacity
+                  onPress={() => {
+                    setActiveField(null);
+                    setSearchResults([]);
+                    Keyboard.dismiss();
+                  }}
+                  style={styles.closeSuggestionsBtn}
+                >
+                  <Text style={[styles.closeSuggestionsText, { color: colors.muted }]}>Cancel search</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {/* Quick Toggles: Night preview, Walking/Driving, GPS Status */}
+            <View style={styles.quickToggleRow}>
+              <View style={styles.modeGroup}>
+                <TouchableOpacity
+                  onPress={() => setTravelMode('walking')}
+                  style={[
+                    styles.modeBtn,
+                    travelMode === 'walking' && { backgroundColor: colors.ink },
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityLabel="Walking mode"
+                >
+                  <Footprints size={14} color={travelMode === 'walking' ? '#ffffff' : colors.muted} />
+                  <Text style={[styles.modeBtnText, { color: travelMode === 'walking' ? '#ffffff' : colors.muted }]}>
+                    {t.walking}
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  onPress={() => setTravelMode('driving')}
+                  style={[
+                    styles.modeBtn,
+                    travelMode === 'driving' && { backgroundColor: colors.ink },
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityLabel="Driving mode"
+                >
+                  <Car size={14} color={travelMode === 'driving' ? '#ffffff' : colors.muted} />
+                  <Text style={[styles.modeBtnText, { color: travelMode === 'driving' ? '#ffffff' : colors.muted }]}>
+                    {t.driving}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* GPS Tracking Toggle Button */}
+              <TouchableOpacity
+                onPress={toggleTracking}
+                style={[
+                  styles.gpsToggleBtn,
+                  {
+                    backgroundColor: isGpsTracking ? 'rgba(16, 185, 129, 0.15)' : colors.surfaceSubtle,
+                    borderColor: isGpsTracking ? colors.safe : colors.line,
+                  },
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel="Toggle live GPS tracking"
+              >
+                {isGpsTracking ? (
+                  <LocateFixed size={14} color={colors.safe} />
+                ) : (
+                  <Locate size={14} color={colors.muted} />
+                )}
+                <Text
+                  style={[
+                    styles.gpsToggleText,
+                    { color: isGpsTracking ? colors.safe : colors.muted },
+                  ]}
+                >
+                  {isGpsTracking ? 'GPS Active' : 'Track GPS'}
+                </Text>
+              </TouchableOpacity>
+
+              {/* Night preview toggle */}
+              <TouchableOpacity
+                onPress={toggleNightPreview}
+                style={[
+                  styles.nightBtn,
+                  {
+                    backgroundColor: isNightPreview ? colors.cautionSubtle : colors.surfaceSubtle,
+                    borderColor: isNightPreview ? colors.caution : colors.line,
+                  },
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel="Toggle night safety preview"
+              >
+                <Moon size={14} color={isNightPreview ? colors.caution : colors.muted} />
+                <Text style={[styles.nightText, { color: isNightPreview ? colors.caution : colors.muted }]}>
+                  {t.night_preview}
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Preset Delhi Quick Destinations & Shortcuts */}
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.presetsRow}>
+              {/* Quick GPS Start Shortcut */}
+              <TouchableOpacity
+                onPress={handleUseGpsAsOrigin}
+                style={[styles.presetChipGps, { borderColor: colors.signal, backgroundColor: colors.signalSubtle }]}
+              >
+                <Locate size={12} color={colors.signal} />
+                <Text style={[styles.presetChipText, { color: colors.signal, fontWeight: '700' }]}>
+                  Current GPS
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={() => handleSelectPreset('India Gate, Rajpath', 28.6129, 77.2295)}
+                style={[styles.presetChip, { borderColor: colors.line }]}
+              >
+                <MapPin size={12} color={colors.signal} />
+                <Text style={[styles.presetChipText, { color: colors.ink }]}>India Gate</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={() => handleSelectPreset('Connaught Place', 28.6328, 77.2197)}
+                style={[styles.presetChip, { borderColor: colors.line }]}
+              >
+                <MapPin size={12} color={colors.signal} />
+                <Text style={[styles.presetChipText, { color: colors.ink }]}>Connaught Place</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={() => handleSelectPreset('Hauz Khas Village', 28.5489, 77.2058)}
+                style={[styles.presetChip, { borderColor: colors.line }]}
+              >
+                <MapPin size={12} color={colors.signal} />
+                <Text style={[styles.presetChipText, { color: colors.ink }]}>Hauz Khas</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={() => handleSelectPreset('Saket Select CITYWALK', 28.5285, 77.2185)}
+                style={[styles.presetChip, { borderColor: colors.line }]}
+              >
+                <MapPin size={12} color={colors.signal} />
+                <Text style={[styles.presetChipText, { color: colors.ink }]}>Saket</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={() => handleSelectPreset('AIIMS New Delhi', 28.5672, 77.2100)}
+                style={[styles.presetChip, { borderColor: colors.line }]}
+              >
+                <MapPin size={12} color={colors.signal} />
+                <Text style={[styles.presetChipText, { color: colors.ink }]}>AIIMS</Text>
+              </TouchableOpacity>
+            </ScrollView>
+          </>
+        )}
       </View>
 
-      {/* Main Map Canvas */}
+      {/* Main Map Canvas - Dominant full screen experience */}
       <View style={styles.mapContainer}>
         <SafeMapView
+          origin={origin}
+          destination={destination}
           selectedRoute={selectedRoute}
           routes={routes}
           currentLocation={currentLocation}
+          isGpsTracking={isGpsTracking}
+          isLocating={isLocating}
+          onLocateMe={toggleTracking}
         />
 
-        {/* Simulator Bar during testing */}
+        {/* Simulator Bar during testing (collapsible) */}
         <View style={styles.simulatorWrapper}>
           <SimulatorBar />
         </View>
 
-        {/* SOS Button: Always visible, never covered */}
+        {/* SOS Button: Always accessible floating over map */}
         <SOSButton size={68} />
       </View>
 
-      {/* Bottom Route Comparison / Trip HUD Drawer */}
+      {/* Bottom Sheet Drawer */}
       <View style={[styles.bottomSheet, { backgroundColor: colors.surface, borderTopColor: colors.line }]}>
         {isTripActive ? (
-          <TripHUD />
+          hudCollapsed ? (
+            /* Minimised Travelling Pill - 90% Screen given to Map */
+            <View style={styles.collapsedHudRow}>
+              <View style={styles.collapsedInfoCol}>
+                <Text style={[styles.collapsedTitle, { color: colors.ink }]} numberOfLines={1}>
+                  {destination.name}
+                </Text>
+                <Text style={[styles.collapsedSub, { color: colors.muted }]}>
+                  {distanceKm} km • ~{durationMin} mins remaining • Safety: {selectedRoute?.safety_score}/100
+                </Text>
+              </View>
+
+              <TouchableOpacity
+                onPress={() => endTrip()}
+                style={[styles.miniEndBtn, { backgroundColor: colors.dangerSubtle, borderColor: colors.danger }]}
+                accessibilityRole="button"
+                accessibilityLabel="End journey"
+              >
+                <StopCircle size={14} color={colors.danger} />
+                <Text style={[styles.miniEndText, { color: colors.danger }]}>End</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={() => setHudCollapsed(false)}
+                style={[styles.miniExpandBtn, { backgroundColor: colors.surfaceSubtle }]}
+                accessibilityRole="button"
+                accessibilityLabel="Show full metrics"
+              >
+                <Maximize2 size={14} color={colors.ink} />
+              </TouchableOpacity>
+            </View>
+          ) : (
+            /* Full Trip HUD */
+            <TripHUD />
+          )
         ) : (
+          /* Route Comparison Drawer */
           <View>
             <View style={styles.sheetHeader}>
               <View>
@@ -296,24 +687,179 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   topControls: {
-    paddingTop: 10,
-    paddingHorizontal: 16,
-    paddingBottom: 10,
+    paddingTop: 8,
+    paddingHorizontal: 14,
+    paddingBottom: 8,
     borderBottomWidth: 1,
     zIndex: 50,
   },
-  searchBar: {
+  navHeaderCard: {
+    borderRadius: 14,
+    borderWidth: 1,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+  },
+  navHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  navModeIconBox: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  navHeaderTextCol: {
+    flex: 1,
+  },
+  navLiveBadgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 2,
+  },
+  liveDotPill: {
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+  },
+  navLiveText: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.6,
+  },
+  navSpeedBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 6,
+    marginLeft: 4,
+  },
+  navSpeedText: {
+    fontSize: 10,
+    fontWeight: '800',
+  },
+  navDestTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  navOriginSub: {
+    fontSize: 11,
+    marginTop: 1,
+  },
+  collapseBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  routeCardContainer: {
+    borderRadius: 14,
+    borderWidth: 1,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+  },
+  inputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    height: 38,
+    gap: 8,
+  },
+  inputIconCircle: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  routeInput: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: '500',
+    paddingVertical: 0,
+  },
+  gpsActionBtn: {
+    padding: 6,
+    borderRadius: 8,
+  },
+  clearBtn: {
+    padding: 4,
+    borderRadius: 8,
+  },
+  swapDividerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: -2,
+    paddingRight: 6,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    marginLeft: 34,
+  },
+  swapBtn: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  autocompleteSheet: {
+    marginTop: 6,
+    borderRadius: 12,
+    borderWidth: 1,
+    maxHeight: 220,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 6,
+    elevation: 8,
+  },
+  suggestionItem: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 12,
-    height: 48,
-    borderRadius: themeTokens.radii.input,
-    borderWidth: 1,
-    gap: 8,
+    paddingVertical: 9,
+    borderBottomWidth: 1,
+    gap: 10,
   },
-  searchInput: {
+  suggIconBox: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  suggTextBox: {
     flex: 1,
-    fontSize: 14,
+  },
+  suggTitle: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  suggSub: {
+    fontSize: 11,
+    marginTop: 1,
+  },
+  closeSuggestionsBtn: {
+    paddingVertical: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  closeSuggestionsText: {
+    fontSize: 12,
+    fontWeight: '500',
   },
   quickToggleRow: {
     flexDirection: 'row',
@@ -331,7 +877,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
-    paddingHorizontal: 10,
+    paddingHorizontal: 9,
     paddingVertical: 5,
     borderRadius: 6,
   },
@@ -339,11 +885,24 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
   },
+  gpsToggleBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  gpsToggleText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
   nightBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
-    paddingHorizontal: 10,
+    paddingHorizontal: 9,
     paddingVertical: 5,
     borderRadius: 8,
     borderWidth: 1,
@@ -357,6 +916,15 @@ const styles = StyleSheet.create({
     gap: 8,
     marginTop: 8,
     paddingBottom: 2,
+  },
+  presetChipGps: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 14,
+    borderWidth: 1,
   },
   presetChip: {
     flexDirection: 'row',
@@ -378,17 +946,17 @@ const styles = StyleSheet.create({
   },
   simulatorWrapper: {
     position: 'absolute',
-    top: 10,
-    left: 0,
-    right: 0,
+    top: 8,
+    left: 10,
+    right: 10,
     zIndex: 100,
   },
   bottomSheet: {
     borderTopLeftRadius: themeTokens.radii.sheet,
     borderTopRightRadius: themeTokens.radii.sheet,
     borderTopWidth: 1,
-    paddingHorizontal: 18,
-    paddingTop: 14,
+    paddingHorizontal: 16,
+    paddingTop: 12,
     paddingBottom: 16,
     maxHeight: 280,
     shadowColor: '#000',
@@ -396,6 +964,44 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.08,
     shadowRadius: 10,
     elevation: 8,
+  },
+  collapsedHudRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 4,
+    gap: 10,
+  },
+  collapsedInfoCol: {
+    flex: 1,
+  },
+  collapsedTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  collapsedSub: {
+    fontSize: 11,
+    marginTop: 2,
+  },
+  miniEndBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  miniEndText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  miniExpandBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   sheetHeader: {
     flexDirection: 'row',

@@ -53,3 +53,14 @@ async def test_route_plan_endpoint():
     assert safest_r["safety_score"] > fastest_r["safety_score"]
     assert len(safest_r["segments"]) > 0
     assert safest_r["weakest_stretch"] is not None
+
+@pytest.mark.anyio
+async def test_geocode_reverse():
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        # Near Connaught Place (28.6328, 77.2197)
+        response = await ac.get("/api/geocode/reverse?lat=28.6328&lng=77.2197")
+    assert response.status_code == 200
+    data = response.json()
+    assert "name" in data
+    assert "Connaught Place" in data["name"]

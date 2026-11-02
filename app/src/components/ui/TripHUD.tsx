@@ -7,6 +7,7 @@ import { ScoreRing } from '@/components/ui/ScoreRing';
 
 export function TripHUD() {
   const selectedRoute = useTripStore((s) => s.selectedRoute);
+  const origin = useTripStore((s) => s.origin);
   const destination = useTripStore((s) => s.destination);
   const batteryLevel = useTripStore((s) => s.batteryLevel);
   const currentSpeed = useTripStore((s) => s.currentSpeed);
@@ -46,9 +47,11 @@ export function TripHUD() {
       {/* Top row: Destination + Safety Ring */}
       <View style={styles.topRow}>
         <View style={styles.destContainer}>
-          <Text style={[styles.headingLabel, { color: colors.muted }]}>Traveling to</Text>
+          <Text style={[styles.headingLabel, { color: colors.muted }]} numberOfLines={1}>
+            From {origin.name}
+          </Text>
           <Text style={[styles.destName, { color: colors.ink }]} numberOfLines={1}>
-            {destination.name}
+            ➔ {destination.name}
           </Text>
           <View style={styles.shareBadge}>
             <View style={[styles.liveDot, { backgroundColor: colors.signal }]} />

@@ -8,7 +8,7 @@ from backend.app.config import settings
 from backend.app.models.report import IncidentReport
 from backend.app.schemas.routing import RoutePlanRequest, RoutePlanResponse
 from backend.app.services.routing import routing_service
-from backend.app.services.osm import osm_service
+from backend.app.services.osm import osm_service, haversine_distance
 
 router = APIRouter(prefix="/api", tags=["Routing & Geocoding"])
 
@@ -79,6 +79,51 @@ async def geocode_search(q: str = Query(..., min_length=2)):
     return [
         {"name": f"{q.title()}, Delhi NCR", "lat": settings.DELHI_CENTER_LAT, "lng": settings.DELHI_CENTER_LNG, "type": "area"}
     ]
+
+@router.get("/geocode/reverse")
+async def geocode_reverse(lat: float = Query(...), lng: float = Query(...)):
+    """Reverse geocode coordinates to a human-readable location in Delhi NCR."""
+    # 1. Match against curated Delhi places within 800m for instant response
+    closest = None
+    min_dist = float("inf")
+    for p in DELHI_CURATED_PLACES:
+        dist = haversine_distance(lat, lng, p["lat"], p["lng"])
+        if dist < min_dist:
+            min_dist = dist
+            closest = p
+
+    if closest and min_dist < 800:
+        return {"name": closest["name"], "lat": lat, "lng": lng, "type": closest.get("type", "landmark")}
+
+    # 2. Query OpenStreetMap Nominatim reverse geocode
+    nominatim_url = "https://nominatim.openstreetmap.org/reverse"
+    params = {
+        "lat": lat,
+        "lon": lng,
+        "format": "json",
+        "zoom": 16,
+        "addressdetails": 1
+    }
+    headers = {
+        "User-Agent": "SafeRouteDelhi/1.0 (safety.hackathon.delhi@gmail.com)"
+    }
+    try:
+        async with httpx.AsyncClient(timeout=4.0) as client:
+            resp = await client.get(nominatim_url, params=params, headers=headers)
+            if resp.status_code == 200:
+                data = resp.json()
+                display_name = data.get("display_name")
+                if display_name:
+                    return {"name": display_name, "lat": lat, "lng": lng, "type": "reverse"}
+    except Exception as e:
+        print(f"Nominatim reverse geocode error: {e}")
+
+    return {
+        "name": f"Delhi NCR ({lat:.4f}, {lng:.4f})",
+        "lat": lat,
+        "lng": lng,
+        "type": "coordinates"
+    }
 
 @router.post("/routes/plan", response_model=RoutePlanResponse)
 async def plan_routes(payload: RoutePlanRequest, db: AsyncSession = Depends(get_db)):
