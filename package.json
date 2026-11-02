@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "SafeRoute: Safety-First Navigation & Personal Safety Mobile App for Delhi NCR",
   "scripts": {
+    "build": "npm --prefix app install && npm --prefix app run build",
     "dev": "concurrently -k -n \"BACKEND,APP\" -c \"blue,green\" \"npm run dev:backend\" \"npm run dev:app\"",
     "dev:backend": "python -m uvicorn backend.app.main:app --host 0.0.0.0 --port 8000 --reload",
     "dev:app": "npm --prefix app start",
