@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Modal, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, Modal, TouchableOpacity, ScrollView } from 'react-native';
 import * as Haptics from 'expo-haptics';
-import { AlertTriangle, AlertCircle } from 'lucide-react-native';
-import { lightColors, darkColors, themeTokens } from '@/theme/tokens';
+import { AlertTriangle, AlertCircle, ShieldAlert, Check, Phone } from 'lucide-react-native';
+import { lightColors, darkColors } from '@/theme/tokens';
 import { useTripStore, useUserStore } from '@/store';
+import { stopEmergencyVibration } from '@/services/alert';
 
 export function CheckInModal() {
   const status = useTripStore((s) => s.status);
@@ -14,6 +15,7 @@ export function CheckInModal() {
   const triggerSOS = useTripStore((s) => s.triggerSOS);
 
   const isDarkMode = useUserStore((s) => s.isDarkMode);
+  const contacts = useUserStore((s) => s.contacts);
   const colors = isDarkMode ? darkColors : lightColors;
 
   const [enteredPin, setEnteredPin] = useState('');
@@ -55,34 +57,55 @@ export function CheckInModal() {
   const verifyPin = (pin: string) => {
     const result = resolveCheckIn(pin);
     if (result.success) {
+      stopEmergencyVibration();
       if (result.isDuress) {
         setToastMessage('Check-in confirmed.');
       }
       setEnteredPin('');
       setErrorMessage('');
     } else {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      setErrorMessage('Incorrect PIN. Please re-enter.');
+      try {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      } catch {}
+      setErrorMessage('Incorrect Safety Code. Please re-enter.');
       setEnteredPin('');
     }
   };
 
   if (!isVisible && !toastMessage) return null;
 
+  // Format contacts summary string
+  const contactNames = contacts.map((c) => c.name).slice(0, 3).join(', ');
+  const moreCount = contacts.length > 3 ? ` +${contacts.length - 3} more` : '';
+
   return (
     <Modal visible={isVisible} animationType="fade" transparent={true}>
       <View style={styles.backdrop}>
         <View style={[styles.container, { backgroundColor: colors.surface }]}>
           {/* Header */}
-          <View style={[styles.headerBadge, { backgroundColor: colors.cautionSubtle }]}>
-            <AlertTriangle size={24} color={colors.caution} />
-            <Text style={[styles.badgeText, { color: colors.caution }]}>Safety Check-In</Text>
+          <View style={[styles.headerBadge, { backgroundColor: colors.dangerSubtle }]}>
+            <AlertTriangle size={22} color={colors.danger} />
+            <Text style={[styles.badgeText, { color: colors.danger }]}>ANOMALY DETECTED</Text>
           </View>
 
-          <Text style={[styles.title, { color: colors.ink }]}>Are you okay?</Text>
+          <Text style={[styles.title, { color: colors.ink }]}>Safety Check-In Required</Text>
           <Text style={[styles.subtitle, { color: colors.muted }]}>
-            {anomalyReason || 'Route deviation or unusual stop detected.'}
+            {anomalyReason || 'Route deviation or unusual stationary stop detected.'}
           </Text>
+
+          {/* Prominent Emergency Warning Notice */}
+          <View style={[styles.warningNoticeBox, { backgroundColor: colors.surfaceSubtle, borderColor: colors.line }]}>
+            <ShieldAlert size={18} color={colors.danger} style={{ marginTop: 2 }} />
+            <Text style={[styles.warningNoticeText, { color: colors.ink }]}>
+              An emergency SOS message will be automatically sent to your trusted contacts (
+              <Text style={{ fontWeight: '700', color: colors.signal }}>
+                {contactNames}
+                {moreCount}
+              </Text>
+              ) via <Text style={{ fontWeight: '700' }}>Email & SMS</Text> in{' '}
+              <Text style={{ fontWeight: '800', color: colors.danger }}>{countdown}s</Text> if you do not enter your Safety Code!
+            </Text>
+          </View>
 
           {/* Deliberate Countdown Ring */}
           <View style={styles.countdownRingContainer}>
@@ -90,7 +113,7 @@ export function CheckInModal() {
               style={[
                 styles.countdownRing,
                 {
-                  borderColor: countdown <= 10 ? colors.danger : colors.caution,
+                  borderColor: countdown <= 15 ? colors.danger : colors.caution,
                   backgroundColor: isDarkMode ? colors.surfaceSubtle : '#fffaf0',
                 },
               ]}
@@ -98,7 +121,7 @@ export function CheckInModal() {
               <Text
                 style={[
                   styles.countdownNumber,
-                  { color: countdown <= 10 ? colors.danger : colors.caution },
+                  { color: countdown <= 15 ? colors.danger : colors.caution },
                 ]}
               >
                 {countdown}
@@ -132,7 +155,7 @@ export function CheckInModal() {
             <Text style={[styles.errorText, { color: colors.danger }]}>{errorMessage}</Text>
           ) : (
             <Text style={[styles.pinInstruction, { color: colors.muted }]}>
-              Enter 4-digit PIN to dismiss check-in
+              Enter your 4-digit Safety Code to confirm you are safe
             </Text>
           )}
 
@@ -181,7 +204,7 @@ export function CheckInModal() {
             accessibilityLabel="I need help now. Triggers emergency SOS immediately."
           >
             <AlertCircle size={20} color="#ffffff" />
-            <Text style={styles.emergencyHelpText}>I need help now (Trigger SOS)</Text>
+            <Text style={styles.emergencyHelpText}>I need help now (Send SOS Immediately)</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -192,113 +215,127 @@ export function CheckInModal() {
 const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
-    backgroundColor: 'rgba(27, 31, 59, 0.75)',
+    backgroundColor: 'rgba(27, 31, 59, 0.85)',
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 20,
+    padding: 16,
   },
   container: {
     width: '100%',
-    maxWidth: 380,
-    borderRadius: themeTokens.radii.sheet,
-    padding: 24,
+    maxWidth: 400,
+    borderRadius: 24,
+    padding: 20,
     alignItems: 'center',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.25,
-    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.35,
+    shadowRadius: 20,
     elevation: 10,
   },
   headerBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 12,
+    gap: 6,
+    paddingHorizontal: 14,
     paddingVertical: 6,
     borderRadius: 20,
-    marginBottom: 12,
+    marginBottom: 8,
   },
   badgeText: {
-    fontSize: 13,
-    fontWeight: '700',
-    textTransform: 'uppercase',
+    fontSize: 12,
+    fontWeight: '800',
     letterSpacing: 0.5,
   },
   title: {
-    fontSize: 24,
+    fontSize: 20,
     fontWeight: '800',
-    marginBottom: 6,
     textAlign: 'center',
+    marginBottom: 4,
   },
   subtitle: {
     fontSize: 13,
-    lineHeight: 18,
     textAlign: 'center',
-    marginBottom: 16,
+    marginBottom: 12,
+    paddingHorizontal: 10,
+  },
+  warningNoticeBox: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 10,
+    marginBottom: 14,
+    width: '100%',
+  },
+  warningNoticeText: {
+    fontSize: 12,
+    lineHeight: 17,
+    flex: 1,
   },
   countdownRingContainer: {
-    marginVertical: 10,
+    alignItems: 'center',
+    marginBottom: 14,
   },
   countdownRing: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    borderWidth: 6,
-    alignItems: 'center',
+    width: 88,
+    height: 88,
+    borderRadius: 44,
+    borderWidth: 4,
     justifyContent: 'center',
+    alignItems: 'center',
   },
   countdownNumber: {
-    fontSize: 32,
-    fontWeight: '800',
+    fontSize: 28,
+    fontWeight: '900',
   },
   countdownLabel: {
-    fontSize: 10,
-    fontWeight: '600',
-    marginTop: -2,
+    fontSize: 9,
+    fontWeight: '700',
+    textTransform: 'uppercase',
   },
   pinDisplayRow: {
     flexDirection: 'row',
-    gap: 16,
-    marginTop: 14,
+    gap: 12,
     marginBottom: 8,
   },
   pinDot: {
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    borderWidth: 1.5,
-  },
-  pinInstruction: {
-    fontSize: 12,
-    marginBottom: 14,
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    borderWidth: 1,
   },
   errorText: {
     fontSize: 12,
-    fontWeight: '600',
-    marginBottom: 14,
+    fontWeight: '700',
+    marginBottom: 8,
+  },
+  pinInstruction: {
+    fontSize: 12,
+    marginBottom: 8,
   },
   keypad: {
     width: '100%',
-    marginBottom: 16,
+    gap: 8,
+    marginBottom: 14,
   },
   keypadRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 10,
-  },
-  keypadBtn: {
-    width: 68,
-    height: 52,
-    borderRadius: 14,
-    alignItems: 'center',
+    gap: 8,
     justifyContent: 'center',
   },
+  keypadBtn: {
+    flex: 1,
+    height: 46,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   keypadBtnPlaceholder: {
-    width: 68,
-    height: 52,
+    flex: 1,
   },
   keypadBtnText: {
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: '700',
   },
   emergencyHelpBtn: {
@@ -307,12 +344,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    paddingVertical: 14,
-    borderRadius: themeTokens.radii.button,
+    paddingVertical: 12,
+    borderRadius: 14,
   },
   emergencyHelpText: {
     color: '#ffffff',
-    fontSize: 15,
-    fontWeight: '700',
+    fontSize: 14,
+    fontWeight: '800',
   },
 });

@@ -75,9 +75,11 @@ export interface TrustedContact {
   id: string;
   name: string;
   phone: string;
+  email?: string;
   relationship: string;
   notify_sms: boolean;
   notify_whatsapp: boolean;
+  notify_email?: boolean;
 }
 
 export const api = {
@@ -237,14 +239,28 @@ export const api = {
   },
 
   async fetchSentMessages() {
+    let localLogs: any[] = [];
+    try {
+      const { appStorage } = require('./storage');
+      localLogs = await appStorage.loadSentMessages();
+    } catch {}
+
     try {
       const res = await fetch(`${BASE_URL}/api/admin/overview?key=SafeDelhi2026`);
       if (res.ok) {
         const data = await res.json();
-        return data.message_logs || [];
+        const remoteLogs = data.message_logs || [];
+        const merged = [...localLogs, ...remoteLogs];
+        const seen = new Set();
+        return merged.filter((item) => {
+          const key = item.id || `${item.recipient}-${item.created_at}`;
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        });
       }
     } catch {}
-    return [];
+    return localLogs;
   }
 };
 

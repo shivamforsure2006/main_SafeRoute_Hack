@@ -10,7 +10,7 @@ import {
   Share,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { ArrowLeft, MessageSquare, RefreshCw, Send, CheckCircle2, Share2 } from 'lucide-react-native';
+import { ArrowLeft, MessageSquare, RefreshCw, Send, CheckCircle2, Share2, Mail } from 'lucide-react-native';
 import { lightColors, darkColors, themeTokens } from '@/theme/tokens';
 import { useUserStore } from '@/store';
 import { api } from '@/services/api';
@@ -108,8 +108,14 @@ export default function SentMessagesScreen() {
               >
                 <View style={styles.cardHeader}>
                   <View style={styles.recipientWrap}>
-                    <Send size={14} color={colors.signal} />
-                    <Text style={[styles.recipientText, { color: colors.ink }]}>{m.recipient}</Text>
+                    {m.channel === 'EMAIL' ? (
+                      <Mail size={14} color={colors.signal} />
+                    ) : (
+                      <Send size={14} color={colors.signal} />
+                    )}
+                    <Text style={[styles.recipientText, { color: colors.ink }]}>
+                      {m.recipient_name ? `${m.recipient_name} (${m.recipient})` : m.recipient}
+                    </Text>
                   </View>
                   <View style={styles.badgeRow}>
                     <View style={[styles.channelBadge, { backgroundColor: colors.surfaceSubtle }]}>

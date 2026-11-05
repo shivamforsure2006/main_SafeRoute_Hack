@@ -673,11 +673,7 @@ export default function MapScreen() {
         onClose={() => setBreakdownRoute(null)}
       />
 
-      {/* Anomaly Check-In Modal ("Are you okay?", 30s Countdown, Duress PIN) */}
-      <CheckInModal />
 
-      {/* Calm Emergency SOS Modal (Post-trigger state, 112, PIN cancel) */}
-      <CalmSOSModal />
     </SafeAreaView>
   );
 }

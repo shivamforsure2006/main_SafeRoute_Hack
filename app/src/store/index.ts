@@ -1,15 +1,22 @@
 import { create } from 'zustand';
 import { RouteAlternative, TrustedContact, api } from '@/services/api';
 import { Language } from '@/i18n/strings';
+import { appStorage, StoredUserProfile } from '@/services/storage';
+import {
+  triggerEmergencyVibration,
+  stopEmergencyVibration,
+  dispatchSOSAlertsToContacts,
+} from '@/services/alert';
 
 export interface UserState {
   id: string;
   name: string;
   phone: string;
-  normalPin: string;
+  email: string;
+  normalPin: string; // Safety Code
   duressPin: string;
   language: Language;
-  checkInTimeout: number; // 15, 30, 60s
+  checkInTimeout: number; // in seconds: default 60s (1 min), customisable
   shakeSensitivity: 'low' | 'medium' | 'high';
   voiceKeyword: string;
   autoShareTrips: boolean;
@@ -17,52 +24,215 @@ export interface UserState {
   volunteerAvailable: boolean;
   contacts: TrustedContact[];
   isDarkMode: boolean;
-  
+
   // Actions
+  updateProfile: (profile: { name?: string; phone?: string; email?: string }) => void;
   setLanguage: (lang: Language) => void;
   toggleDarkMode: () => void;
   updatePins: (normal: string, duress: string) => void;
   setCheckInTimeout: (timeout: number) => void;
   addContact: (contact: Omit<TrustedContact, 'id'>) => void;
+  updateContact: (id: string, contact: Partial<TrustedContact>) => void;
   removeContact: (id: string) => void;
+  resetToDefaults: () => void;
+  loadStoredProfile: () => Promise<void>;
   toggleVolunteer: (available: boolean) => void;
 }
 
-export const useUserStore = create<UserState>((set) => ({
+const DEFAULT_PROFILE: StoredUserProfile = {
   id: 'demo-delhi-user-01',
   name: 'Ananya Sharma',
   phone: '+919810012345',
+  email: 'ananya.sharma@example.com',
   normalPin: '1234',
   duressPin: '9999',
   language: 'en',
-  checkInTimeout: 30,
+  checkInTimeout: 60, // 1 minute default
+  isDarkMode: false,
+  contacts: [
+    {
+      id: 'c1',
+      name: 'Mom (Dr. Sunita)',
+      phone: '+919811122233',
+      email: 'sunita.sharma@example.com',
+      relationship: 'Parent',
+      notify_sms: true,
+      notify_email: true,
+      notify_whatsapp: true,
+    },
+    {
+      id: 'c2',
+      name: 'Rohit (Partner)',
+      phone: '+919877788899',
+      email: 'rohit.verma@example.com',
+      relationship: 'Spouse',
+      notify_sms: true,
+      notify_email: true,
+      notify_whatsapp: true,
+    },
+    {
+      id: 'c3',
+      name: 'Pooja (Colleague)',
+      phone: '+919822233344',
+      email: 'pooja.k@example.com',
+      relationship: 'Friend',
+      notify_sms: true,
+      notify_email: true,
+      notify_whatsapp: false,
+    },
+  ],
+};
+
+// Attempt to load from synchronous storage on initial load
+const initialStored = appStorage.loadUserProfileSync() || DEFAULT_PROFILE;
+
+function persistHelper(state: UserState) {
+  const profileToSave: StoredUserProfile = {
+    id: state.id,
+    name: state.name,
+    phone: state.phone,
+    email: state.email,
+    normalPin: state.normalPin,
+    duressPin: state.duressPin,
+    language: state.language,
+    checkInTimeout: state.checkInTimeout,
+    isDarkMode: state.isDarkMode,
+    contacts: state.contacts,
+  };
+  appStorage.saveUserProfile(profileToSave);
+}
+
+export const useUserStore = create<UserState>((set, get) => ({
+  id: initialStored.id || DEFAULT_PROFILE.id,
+  name: initialStored.name || DEFAULT_PROFILE.name,
+  phone: initialStored.phone || DEFAULT_PROFILE.phone,
+  email: initialStored.email || DEFAULT_PROFILE.email,
+  normalPin: initialStored.normalPin || DEFAULT_PROFILE.normalPin,
+  duressPin: initialStored.duressPin || DEFAULT_PROFILE.duressPin,
+  language: (initialStored.language as Language) || DEFAULT_PROFILE.language,
+  checkInTimeout: initialStored.checkInTimeout || 60,
   shakeSensitivity: 'medium',
   voiceKeyword: 'Help SafeRoute',
   autoShareTrips: true,
   isVolunteer: false,
   volunteerAvailable: false,
-  isDarkMode: false,
-  contacts: [
-    { id: 'c1', name: 'Mom (Dr. Sunita)', phone: '+919811122233', relationship: 'Parent', notify_sms: true, notify_whatsapp: true },
-    { id: 'c2', name: 'Rohit (Partner)', phone: '+919877788899', relationship: 'Spouse', notify_sms: true, notify_whatsapp: true },
-    { id: 'c3', name: 'Pooja (Colleague)', phone: '+919822233344', relationship: 'Friend', notify_sms: true, notify_whatsapp: false },
-  ],
+  isDarkMode: initialStored.isDarkMode ?? DEFAULT_PROFILE.isDarkMode,
+  contacts: initialStored.contacts?.length ? initialStored.contacts : DEFAULT_PROFILE.contacts,
 
-  setLanguage: (language) => set({ language }),
-  toggleDarkMode: () => set((state) => ({ isDarkMode: !state.isDarkMode })),
-  updatePins: (normalPin, duressPin) => set({ normalPin, duressPin }),
-  setCheckInTimeout: (checkInTimeout) => set({ checkInTimeout }),
-  addContact: (contact) =>
-    set((state) => ({
-      contacts: [...state.contacts, { ...contact, id: `c-${Date.now()}` }],
-    })),
-  removeContact: (id) =>
-    set((state) => ({
-      contacts: state.contacts.filter((c) => c.id !== id),
-    })),
+  updateProfile: ({ name, phone, email }) => {
+    set((state) => {
+      const next = {
+        name: name !== undefined ? name : state.name,
+        phone: phone !== undefined ? phone : state.phone,
+        email: email !== undefined ? email : state.email,
+      };
+      const updated = { ...state, ...next };
+      persistHelper(updated);
+      return next;
+    });
+  },
+
+  setLanguage: (language) => {
+    set((state) => {
+      const updated = { ...state, language };
+      persistHelper(updated);
+      return { language };
+    });
+  },
+
+  toggleDarkMode: () => {
+    set((state) => {
+      const isDarkMode = !state.isDarkMode;
+      const updated = { ...state, isDarkMode };
+      persistHelper(updated);
+      return { isDarkMode };
+    });
+  },
+
+  updatePins: (normalPin, duressPin) => {
+    set((state) => {
+      const updated = { ...state, normalPin, duressPin };
+      persistHelper(updated);
+      return { normalPin, duressPin };
+    });
+  },
+
+  setCheckInTimeout: (checkInTimeout) => {
+    set((state) => {
+      const updated = { ...state, checkInTimeout };
+      persistHelper(updated);
+      return { checkInTimeout };
+    });
+  },
+
+  addContact: (contact) => {
+    set((state) => {
+      const newContact: TrustedContact = {
+        ...contact,
+        id: `c-${Date.now()}`,
+        notify_sms: contact.notify_sms ?? true,
+        notify_email: contact.notify_email ?? true,
+        notify_whatsapp: contact.notify_whatsapp ?? false,
+      };
+      const contacts = [...state.contacts, newContact];
+      const updated = { ...state, contacts };
+      persistHelper(updated);
+      return { contacts };
+    });
+  },
+
+  updateContact: (id, contactUpdates) => {
+    set((state) => {
+      const contacts = state.contacts.map((c) =>
+        c.id === id ? { ...c, ...contactUpdates } : c
+      );
+      const updated = { ...state, contacts };
+      persistHelper(updated);
+      return { contacts };
+    });
+  },
+
+  removeContact: (id) => {
+    set((state) => {
+      const contacts = state.contacts.filter((c) => c.id !== id);
+      const updated = { ...state, contacts };
+      persistHelper(updated);
+      return { contacts };
+    });
+  },
+
+  resetToDefaults: () => {
+    set(DEFAULT_PROFILE);
+    persistHelper(get());
+  },
+
+  loadStoredProfile: async () => {
+    const stored = await appStorage.loadUserProfile();
+    if (stored) {
+      set({
+        name: stored.name || DEFAULT_PROFILE.name,
+        phone: stored.phone || DEFAULT_PROFILE.phone,
+        email: stored.email || DEFAULT_PROFILE.email,
+        normalPin: stored.normalPin || DEFAULT_PROFILE.normalPin,
+        duressPin: stored.duressPin || DEFAULT_PROFILE.duressPin,
+        language: stored.language || DEFAULT_PROFILE.language,
+        checkInTimeout: stored.checkInTimeout || 60,
+        isDarkMode: stored.isDarkMode ?? DEFAULT_PROFILE.isDarkMode,
+        contacts: stored.contacts?.length ? stored.contacts : DEFAULT_PROFILE.contacts,
+      });
+    }
+  },
+
   toggleVolunteer: (volunteerAvailable) =>
     set({ isVolunteer: true, volunteerAvailable }),
 }));
+
+// Trigger asynchronous rehydration in background
+appStorage.loadUserProfile().then((stored) => {
+  if (stored) {
+    useUserStore.getState().loadStoredProfile();
+  }
+});
 
 export type TripStatus = 'IDLE' | 'PLANNING' | 'ACTIVE' | 'CHECK_IN' | 'SOS_ACTIVE' | 'COMPLETED';
 
@@ -78,7 +248,7 @@ export interface TripState {
   activeSosId: string | null;
   trackingToken: string | null;
   trackingUrl: string | null;
-  
+
   // Real-time telemetry
   currentLocation: { lat: number; lng: number };
   currentSpeed: number; // m/s
@@ -127,12 +297,12 @@ export const useTripStore = create<TripState>((set, get) => ({
   activeSosId: null,
   trackingToken: null,
   trackingUrl: null,
-  
+
   currentLocation: { lat: 28.6328, lng: 77.2197 },
   currentSpeed: 1.3,
   batteryLevel: 94,
   anomalyReason: null,
-  checkInCountdown: 30,
+  checkInCountdown: 60,
   isGpsTracking: false,
 
   showStreetLights: true,
@@ -198,7 +368,10 @@ export const useTripStore = create<TripState>((set, get) => ({
   },
 
   triggerCheckIn: (reason) => {
-    const timeout = useUserStore.getState().checkInTimeout;
+    const timeout = useUserStore.getState().checkInTimeout || 60;
+    // Trigger physical alert vibration on anomaly detection
+    triggerEmergencyVibration();
+
     set({
       status: 'CHECK_IN',
       anomalyReason: reason,
@@ -209,8 +382,27 @@ export const useTripStore = create<TripState>((set, get) => ({
   decrementCountdown: () => {
     const state = get();
     if (state.status !== 'CHECK_IN') return;
+
     if (state.checkInCountdown <= 1) {
-      // Escalated!
+      // Escalated! Timer expired without safety code
+      stopEmergencyVibration();
+
+      const user = useUserStore.getState();
+      const trackingUrl = state.trackingUrl || `https://saferoute-delhi.com/track/${state.trackingToken || 'emergency'}`;
+
+      // Dispatch emergency messages via Email & SMS to all trusted contacts
+      dispatchSOSAlertsToContacts({
+        userName: user.name,
+        userPhone: user.phone,
+        contacts: user.contacts,
+        location: state.currentLocation,
+        batteryLevel: state.batteryLevel,
+        anomalyReason: state.anomalyReason || 'Anomaly check-in timer expired without safety code',
+        trackingUrl,
+        triggerType: 'ANOMALY_TIMEOUT',
+      });
+
+      // Also trigger backend SOS flow
       get().triggerSOS('CHECK_IN_TIMEOUT');
     } else {
       set({ checkInCountdown: state.checkInCountdown - 1 });
@@ -218,12 +410,27 @@ export const useTripStore = create<TripState>((set, get) => ({
   },
 
   resolveCheckIn: (pin) => {
-    const { normalPin, duressPin } = useUserStore.getState();
+    const { normalPin, duressPin, name, phone, contacts } = useUserStore.getState();
+    const state = get();
+
     if (pin === normalPin) {
+      // User entered safety code: stop alert vibration and resume safe journey
+      stopEmergencyVibration();
       set({ status: 'ACTIVE', anomalyReason: null });
       return { success: true, isDuress: false };
     } else if (pin === duressPin) {
-      // Duress: mask visually but silently trigger SOS
+      // Duress: mask visually to protect user, but immediately dispatch SOS
+      stopEmergencyVibration();
+      dispatchSOSAlertsToContacts({
+        userName: name,
+        userPhone: phone,
+        contacts,
+        location: state.currentLocation,
+        batteryLevel: state.batteryLevel,
+        anomalyReason: 'Silent Duress Code entered under coercion',
+        trackingUrl: state.trackingUrl || 'https://saferoute-delhi.com/track/emergency',
+        triggerType: 'DURESS_PIN',
+      });
       get().triggerSOS('DURESS_PIN');
       return { success: true, isDuress: true };
     }
@@ -233,6 +440,19 @@ export const useTripStore = create<TripState>((set, get) => ({
   triggerSOS: async (triggerType) => {
     const state = get();
     const user = useUserStore.getState();
+
+    // Dispatch messages to contacts locally as well
+    dispatchSOSAlertsToContacts({
+      userName: user.name,
+      userPhone: user.phone,
+      contacts: user.contacts,
+      location: state.currentLocation,
+      batteryLevel: state.batteryLevel,
+      anomalyReason: triggerType,
+      trackingUrl: state.trackingUrl || 'https://saferoute-delhi.com/track/emergency',
+      triggerType,
+    });
+
     const res = await api.triggerSOS({
       user_id: user.id,
       trip_id: state.activeTripId || undefined,
@@ -254,6 +474,8 @@ export const useTripStore = create<TripState>((set, get) => ({
     const { normalPin } = useUserStore.getState();
     if (pin !== normalPin) return false;
 
+    stopEmergencyVibration();
+
     if (state.activeSosId) {
       await api.cancelSOS(state.activeSosId, pin);
     }
@@ -267,6 +489,7 @@ export const useTripStore = create<TripState>((set, get) => ({
 
   endTrip: async () => {
     const state = get();
+    stopEmergencyVibration();
     if (state.activeTripId) {
       await api.endTrip(state.activeTripId);
     }
@@ -277,14 +500,16 @@ export const useTripStore = create<TripState>((set, get) => ({
     });
   },
 
-  resetToIdle: () =>
+  resetToIdle: () => {
+    stopEmergencyVibration();
     set({
       status: 'IDLE',
       activeTripId: null,
       activeSosId: null,
       routes: [],
       selectedRoute: null,
-    }),
+    });
+  },
 
   toggleLayer: (layer) => {
     set((state) => {

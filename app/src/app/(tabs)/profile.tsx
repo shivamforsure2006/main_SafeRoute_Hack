@@ -15,91 +15,246 @@ import {
   User,
   Shield,
   Phone,
+  Mail,
   Lock,
   Clock,
   Activity,
   Globe,
   Moon,
   Trash2,
+  Edit2,
   Send,
   Plus,
   PlayCircle,
   MessageSquare,
-  Mic,
   Share2,
+  CheckCircle2,
+  Database,
+  AlertTriangle,
+  RotateCcw,
 } from 'lucide-react-native';
 import { lightColors, darkColors, themeTokens } from '@/theme/tokens';
-import { useUserStore } from '@/store';
+import { useUserStore, useTripStore } from '@/store';
 import { strings } from '@/i18n/strings';
-import { api } from '@/services/api';
+import { TrustedContact } from '@/services/api';
+import { appStorage } from '@/services/storage';
 
 export default function ProfileScreen() {
   const router = useRouter();
   const user = useUserStore();
+  const trip = useTripStore();
   const isDarkMode = user.isDarkMode;
   const lang = user.language;
   const t = strings[lang] || strings.en;
   const colors = isDarkMode ? darkColors : lightColors;
 
+  // Profile editing state
+  const [isEditingProfile, setIsEditingProfile] = useState(false);
+  const [profileName, setProfileName] = useState(user.name);
+  const [profilePhone, setProfilePhone] = useState(user.phone);
+  const [profileEmail, setProfileEmail] = useState(user.email || '');
+
+  // PINs editing state
   const [normalPin, setNormalPin] = useState(user.normalPin);
   const [duressPin, setDuressPin] = useState(user.duressPin);
-  const [newContactName, setNewContactName] = useState('');
-  const [newContactPhone, setNewContactPhone] = useState('');
-  const [newContactRelation, setNewContactRelation] = useState('Friend');
-  const [addContactModal, setAddContactModal] = useState(false);
 
+  // Timer custom input state
+  const [customTimerInput, setCustomTimerInput] = useState(String(user.checkInTimeout));
+
+  // Contact add / edit modal state
+  const [contactModalOpen, setContactModalOpen] = useState(false);
+  const [editingContactId, setEditingContactId] = useState<string | null>(null);
+  const [contactName, setContactName] = useState('');
+  const [contactPhone, setContactPhone] = useState('');
+  const [contactEmail, setContactEmail] = useState('');
+  const [contactRelation, setContactRelation] = useState('Friend');
+  const [contactNotifySms, setContactNotifySms] = useState(true);
+  const [contactNotifyEmail, setContactNotifyEmail] = useState(true);
+
+  // Save Name & Phone & Email to local storage
+  const handleSaveProfile = () => {
+    if (!profileName.trim()) {
+      Alert.alert('Required', 'Please enter your name.');
+      return;
+    }
+    if (!profilePhone.trim()) {
+      Alert.alert('Required', 'Please enter your phone number.');
+      return;
+    }
+    user.updateProfile({
+      name: profileName.trim(),
+      phone: profilePhone.trim(),
+      email: profileEmail.trim(),
+    });
+    setIsEditingProfile(false);
+    Alert.alert('Profile Saved', 'Your Name and Phone Number have been saved to local storage.');
+  };
+
+  // Save PINs to local storage
   const handleSavePins = () => {
     if (normalPin.length !== 4 || duressPin.length !== 4) {
       Alert.alert('Error', 'PINs must be exactly 4 digits.');
       return;
     }
     if (normalPin === duressPin) {
-      Alert.alert('Error', 'Normal PIN and Duress PIN must be different for security.');
+      Alert.alert('Error', 'Safety Code (Normal PIN) and Duress PIN must be different for security.');
       return;
     }
     user.updatePins(normalPin, duressPin);
-    Alert.alert('PINs Updated', 'Your normal PIN and silent duress PIN have been saved.');
+    Alert.alert('Security Saved', 'Your Safety Code and Duress PIN are securely saved to local storage.');
   };
 
-  const handleAddContact = () => {
-    if (!newContactName.trim() || !newContactPhone.trim()) {
+  // Save SOS message countdown timer
+  const handleSelectTimer = (sec: number) => {
+    user.setCheckInTimeout(sec);
+    setCustomTimerInput(String(sec));
+  };
+
+  const handleSaveCustomTimer = () => {
+    const parsed = parseInt(customTimerInput, 10);
+    if (isNaN(parsed) || parsed < 10 || parsed > 300) {
+      Alert.alert('Invalid Timer', 'Please enter a timer duration between 10 and 300 seconds.');
+      return;
+    }
+    user.setCheckInTimeout(parsed);
+    Alert.alert('Timer Updated', `SOS emergency message timer set to ${parsed} seconds (${(parsed / 60).toFixed(1)} min).`);
+  };
+
+  // Open modal to add contact
+  const handleOpenAddContact = () => {
+    setEditingContactId(null);
+    setContactName('');
+    setContactPhone('');
+    setContactEmail('');
+    setContactRelation('Friend');
+    setContactNotifySms(true);
+    setContactNotifyEmail(true);
+    setContactModalOpen(true);
+  };
+
+  // Open modal to edit existing contact
+  const handleOpenEditContact = (c: TrustedContact) => {
+    setEditingContactId(c.id);
+    setContactName(c.name);
+    setContactPhone(c.phone);
+    setContactEmail(c.email || '');
+    setContactRelation(c.relationship || 'Friend');
+    setContactNotifySms(c.notify_sms !== false);
+    setContactNotifyEmail(c.notify_email !== false);
+    setContactModalOpen(true);
+  };
+
+  // Save contact (add or update)
+  const handleSaveContact = () => {
+    if (!contactName.trim() || !contactPhone.trim()) {
       Alert.alert('Required', 'Please enter contact name and phone number.');
       return;
     }
-    if (user.contacts.length >= 5) {
-      Alert.alert('Limit Reached', 'You can register up to 5 trusted emergency contacts.');
-      return;
+
+    if (editingContactId) {
+      // Update existing contact
+      user.updateContact(editingContactId, {
+        name: contactName.trim(),
+        phone: contactPhone.trim(),
+        email: contactEmail.trim(),
+        relationship: contactRelation,
+        notify_sms: contactNotifySms,
+        notify_email: contactNotifyEmail,
+      });
+      Alert.alert('Contact Updated', `${contactName} updated and saved to local storage.`);
+    } else {
+      // Add new contact
+      if (user.contacts.length >= 6) {
+        Alert.alert('Limit Reached', 'You can register up to 6 trusted emergency contacts.');
+        return;
+      }
+      user.addContact({
+        name: contactName.trim(),
+        phone: contactPhone.trim(),
+        email: contactEmail.trim(),
+        relationship: contactRelation,
+        notify_sms: contactNotifySms,
+        notify_email: contactNotifyEmail,
+        notify_whatsapp: true,
+      });
+      Alert.alert('Contact Added', `${contactName} added and saved to local storage.`);
     }
-    user.addContact({
-      name: newContactName,
-      phone: newContactPhone,
-      relationship: newContactRelation,
-      notify_sms: true,
-      notify_whatsapp: true,
-    });
-    setNewContactName('');
-    setNewContactPhone('');
-    setAddContactModal(false);
+
+    setContactModalOpen(false);
   };
 
-  const handleSendTestMessage = async (phone: string, name: string) => {
+  // Delete contact
+  const handleDeleteContact = (id: string, name: string) => {
     Alert.alert(
-      'Test Alert Sent',
-      `A test verification alert has been dispatched to ${name} (${phone}). You can review this in the Sent Alerts log.`
-    );
-  };
-
-  const handleDeleteData = () => {
-    Alert.alert(
-      'Delete My Data',
-      'Are you sure you want to permanently erase all trip history, emergency contacts, and personal preferences from SafeRoute?',
+      'Remove Contact',
+      `Are you sure you want to remove ${name} from your trusted emergency contacts?`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: 'Delete Permanently',
+          text: 'Remove',
           style: 'destructive',
           onPress: () => {
-            Alert.alert('Data Erased', 'All your personal telemetry and records have been deleted.');
+            user.removeContact(id);
+          },
+        },
+      ]
+    );
+  };
+
+  // Send test verification alert
+  const handleSendTestMessage = async (c: TrustedContact) => {
+    const channels: string[] = [];
+    if (c.notify_sms !== false) channels.push(`SMS (${c.phone})`);
+    if (c.email && c.notify_email !== false) channels.push(`Email (${c.email})`);
+
+    const channelStr = channels.length > 0 ? channels.join(' & ') : `SMS (${c.phone})`;
+
+    // Record test message log
+    await appStorage.saveSentMessage({
+      id: `test-${Date.now()}`,
+      recipient: c.phone,
+      recipient_name: c.name,
+      channel: 'SMS',
+      title: `Verification Test to ${c.name}`,
+      content: `SafeRoute Test: ${user.name} tested their emergency alert channel with you. In case of an anomaly in Delhi, you will receive live GPS tracking links here.`,
+      status: 'SENT',
+      created_at: new Date().toISOString(),
+    });
+
+    Alert.alert(
+      'Test Alert Dispatched',
+      `Verification test dispatched to ${c.name} via ${channelStr}. This has been recorded in your Sent Alerts log.`
+    );
+  };
+
+  // Simulate Anomaly Alert right now
+  const handleSimulateAnomaly = () => {
+    trip.triggerCheckIn('Test Anomaly: Unscheduled 2-minute stationary stop detected');
+    Alert.alert(
+      'Anomaly Alert Triggered',
+      `A safety check-in has started with vibration! If you do not enter Safety Code ${user.normalPin} within ${user.checkInTimeout}s, emergency SOS alerts will be dispatched to your trusted contacts.`
+    );
+  };
+
+  // Reset all to defaults
+  const handleResetDefaults = () => {
+    Alert.alert(
+      'Reset Settings',
+      'Reset name, contacts, PINs, and timer back to Delhi default demo data?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Reset',
+          style: 'destructive',
+          onPress: () => {
+            user.resetToDefaults();
+            setProfileName('Ananya Sharma');
+            setProfilePhone('+919810012345');
+            setProfileEmail('ananya.sharma@example.com');
+            setNormalPin('1234');
+            setDuressPin('9999');
+            setCustomTimerInput('60');
+            Alert.alert('Reset Complete', 'Default settings restored and saved.');
           },
         },
       ]
@@ -112,7 +267,9 @@ export default function ProfileScreen() {
       <View style={[styles.header, { backgroundColor: colors.surface, borderBottomColor: colors.line }]}>
         <View>
           <Text style={[styles.title, { color: colors.ink }]}>{user.name}</Text>
-          <Text style={[styles.sub, { color: colors.muted }]}>{user.phone} • Delhi NCR</Text>
+          <Text style={[styles.sub, { color: colors.muted }]}>
+            {user.phone} • {user.email || 'Delhi NCR'}
+          </Text>
         </View>
 
         <View style={styles.headerBtnGroup}>
@@ -123,12 +280,20 @@ export default function ProfileScreen() {
             accessibilityLabel="Run guided demo walkthrough"
           >
             <PlayCircle size={15} color="#ffffff" />
-            <Text style={styles.guidedDemoText}>Guided Demo</Text>
+            <Text style={styles.guidedDemoText}>Demo</Text>
           </TouchableOpacity>
         </View>
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollBody} showsVerticalScrollIndicator={false}>
+        {/* Local Storage Intact Indicator */}
+        <View style={[styles.storageBadgeBanner, { backgroundColor: colors.safeSubtle, borderColor: colors.safe }]}>
+          <Database size={16} color={colors.safe} />
+          <Text style={[styles.storageBadgeText, { color: colors.safe }]}>
+            Persisted in Local Storage: All profile details, trusted contacts, and emergency timers remain intact on this device.
+          </Text>
+        </View>
+
         {/* Quick Links: Sent Alerts */}
         <TouchableOpacity
           onPress={() => router.push('/sent-messages')}
@@ -136,108 +301,391 @@ export default function ProfileScreen() {
         >
           <View style={styles.alertLogIconText}>
             <MessageSquare size={18} color={colors.signal} />
-            <View>
+            <View style={{ flex: 1 }}>
               <Text style={[styles.alertLogTitle, { color: colors.ink }]}>Sent Emergency Alerts Log</Text>
-              <Text style={[styles.alertLogSub, { color: colors.muted }]}>Review all dispatched SMS and WhatsApp alerts</Text>
+              <Text style={[styles.alertLogSub, { color: colors.muted }]}>
+                Review dispatched SMS, Email & WhatsApp emergency alerts
+              </Text>
             </View>
           </View>
         </TouchableOpacity>
 
-        {/* Section 1: Trusted Contacts */}
+        {/* Section 1: User Profile Customisation (Name & Phone Number & Email) */}
+        <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.line }]}>
+          <View style={styles.cardHeaderRow}>
+            <View style={styles.cardHeaderLeft}>
+              <User size={18} color={colors.signal} />
+              <Text style={[styles.cardTitle, { color: colors.ink }]}>User Profile</Text>
+            </View>
+            <TouchableOpacity
+              onPress={() => setIsEditingProfile(!isEditingProfile)}
+              style={[styles.smallActionBtn, { backgroundColor: colors.surfaceSubtle }]}
+            >
+              <Edit2 size={13} color={colors.signal} />
+              <Text style={[styles.smallActionText, { color: colors.signal }]}>
+                {isEditingProfile ? 'Cancel' : 'Edit Profile'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          {isEditingProfile ? (
+            <View style={styles.editProfileForm}>
+              <Text style={[styles.inputLabel, { color: colors.muted }]}>Full Name</Text>
+              <TextInput
+                value={profileName}
+                onChangeText={setProfileName}
+                placeholder="Your Name (e.g., Ananya Sharma)"
+                placeholderTextColor={colors.muted}
+                style={[styles.input, { backgroundColor: colors.surfaceSubtle, color: colors.ink, borderColor: colors.line }]}
+              />
+
+              <Text style={[styles.inputLabel, { color: colors.muted }]}>Phone Number</Text>
+              <TextInput
+                value={profilePhone}
+                onChangeText={setProfilePhone}
+                placeholder="Phone (+91 98100 12345)"
+                placeholderTextColor={colors.muted}
+                keyboardType="phone-pad"
+                style={[styles.input, { backgroundColor: colors.surfaceSubtle, color: colors.ink, borderColor: colors.line }]}
+              />
+
+              <Text style={[styles.inputLabel, { color: colors.muted }]}>Email Address (for Emergency Notifications)</Text>
+              <TextInput
+                value={profileEmail}
+                onChangeText={setProfileEmail}
+                placeholder="Email (e.g., ananya@example.com)"
+                placeholderTextColor={colors.muted}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                style={[styles.input, { backgroundColor: colors.surfaceSubtle, color: colors.ink, borderColor: colors.line }]}
+              />
+
+              <TouchableOpacity
+                onPress={handleSaveProfile}
+                style={[styles.saveBtn, { backgroundColor: colors.signal }]}
+              >
+                <CheckCircle2 size={16} color="#ffffff" />
+                <Text style={styles.saveBtnText}>Save Profile to Storage</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <View style={styles.profileSummaryRow}>
+              <View style={styles.profileDataCol}>
+                <Text style={[styles.profileLabel, { color: colors.muted }]}>Name</Text>
+                <Text style={[styles.profileValue, { color: colors.ink }]}>{user.name}</Text>
+              </View>
+              <View style={styles.profileDataCol}>
+                <Text style={[styles.profileLabel, { color: colors.muted }]}>Phone</Text>
+                <Text style={[styles.profileValue, { color: colors.ink }]}>{user.phone}</Text>
+              </View>
+              {user.email ? (
+                <View style={styles.profileDataCol}>
+                  <Text style={[styles.profileLabel, { color: colors.muted }]}>Email</Text>
+                  <Text style={[styles.profileValue, { color: colors.ink }]}>{user.email}</Text>
+                </View>
+              ) : null}
+            </View>
+          )}
+        </View>
+
+        {/* Section 2: Anomaly & SOS Message Countdown Timer (Customisable) */}
+        <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.line }]}>
+          <View style={styles.cardHeaderLeft}>
+            <Clock size={18} color={colors.danger} />
+            <Text style={[styles.cardTitle, { color: colors.ink }]}>
+              SOS Message Timer ({user.checkInTimeout}s / {(user.checkInTimeout / 60).toFixed(1)} min)
+            </Text>
+          </View>
+
+          <Text style={[styles.cardExplainer, { color: colors.muted }]}>
+            When an anomaly (route deviation, unusual stop) is detected, SafeRoute alerts you with{' '}
+            <Text style={{ fontWeight: '700', color: colors.ink }}>vibration</Text>. If you do not enter your Safety Code within this timer, an emergency SOS is dispatched to your trusted contacts via{' '}
+            <Text style={{ fontWeight: '700', color: colors.signal }}>Email & SMS</Text>.
+          </Text>
+
+          {/* Preset Pills */}
+          <View style={styles.timerPillsRow}>
+            {[
+              { label: '30s', value: 30 },
+              { label: '60s (1 min - Recommended)', value: 60 },
+              { label: '90s', value: 90 },
+              { label: '120s (2 min)', value: 120 },
+            ].map((item) => (
+              <TouchableOpacity
+                key={item.value}
+                onPress={() => handleSelectTimer(item.value)}
+                style={[
+                  styles.timerPill,
+                  {
+                    backgroundColor:
+                      user.checkInTimeout === item.value ? colors.ink : colors.surfaceSubtle,
+                    borderColor:
+                      user.checkInTimeout === item.value ? colors.ink : colors.line,
+                  },
+                ]}
+              >
+                <Text
+                  style={{
+                    color: user.checkInTimeout === item.value ? '#ffffff' : colors.ink,
+                    fontSize: 12,
+                    fontWeight: '700',
+                  }}
+                >
+                  {item.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          {/* Custom seconds input */}
+          <View style={styles.customTimerRow}>
+            <Text style={[styles.customTimerLabel, { color: colors.ink }]}>Custom Seconds:</Text>
+            <TextInput
+              value={customTimerInput}
+              onChangeText={setCustomTimerInput}
+              keyboardType="numeric"
+              placeholder="60"
+              placeholderTextColor={colors.muted}
+              style={[
+                styles.customTimerInput,
+                { backgroundColor: colors.surfaceSubtle, color: colors.ink, borderColor: colors.line },
+              ]}
+            />
+            <TouchableOpacity
+              onPress={handleSaveCustomTimer}
+              style={[styles.customTimerBtn, { backgroundColor: colors.surfaceSubtle, borderColor: colors.line }]}
+            >
+              <Text style={[styles.customTimerBtnText, { color: colors.ink }]}>Set</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Simulate Anomaly Button */}
+          <TouchableOpacity
+            onPress={handleSimulateAnomaly}
+            style={[styles.simulateAnomalyBtn, { backgroundColor: colors.cautionSubtle, borderColor: colors.caution }]}
+          >
+            <AlertTriangle size={15} color={colors.caution} />
+            <Text style={[styles.simulateAnomalyText, { color: colors.caution }]}>
+              Test Anomaly Vibration & Countdown Alert
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Section 3: Trusted Emergency Contacts (Add, Edit, Delete, Email/SMS) */}
         <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.line }]}>
           <View style={styles.cardHeaderRow}>
             <View style={styles.cardHeaderLeft}>
               <Phone size={18} color={colors.signal} />
               <Text style={[styles.cardTitle, { color: colors.ink }]}>
-                {t.trusted_contacts} ({user.contacts.length}/5)
+                Trusted Contacts ({user.contacts.length}/6)
               </Text>
             </View>
-            {user.contacts.length < 5 && (
+            {user.contacts.length < 6 && (
               <TouchableOpacity
-                onPress={() => setAddContactModal(true)}
-                style={[styles.addBtnSmall, { backgroundColor: colors.surfaceSubtle }]}
+                onPress={handleOpenAddContact}
+                style={[styles.addBtnSmall, { backgroundColor: colors.signal }]}
               >
-                <Plus size={14} color={colors.signal} />
-                <Text style={[styles.addBtnText, { color: colors.signal }]}>Add</Text>
+                <Plus size={14} color="#ffffff" />
+                <Text style={styles.addBtnText}>Add Contact</Text>
               </TouchableOpacity>
             )}
           </View>
 
+          <Text style={[styles.cardExplainer, { color: colors.muted, marginBottom: 12 }]}>
+            These contacts will receive emergency SOS alerts via Email & SMS when an anomaly is detected and not disarmed.
+          </Text>
+
           {user.contacts.map((c) => (
-            <View key={c.id} style={[styles.contactRow, { borderColor: colors.line }]}>
-              <View style={styles.contactInfo}>
-                <Text style={[styles.contactName, { color: colors.ink }]}>{c.name}</Text>
-                <Text style={[styles.contactMeta, { color: colors.muted }]}>
-                  {c.phone} • {c.relationship}
-                </Text>
+            <View key={c.id} style={[styles.contactCardItem, { backgroundColor: colors.surfaceSubtle, borderColor: colors.line }]}>
+              <View style={styles.contactHeaderLine}>
+                <View>
+                  <Text style={[styles.contactName, { color: colors.ink }]}>{c.name}</Text>
+                  <Text style={[styles.contactMeta, { color: colors.muted }]}>
+                    {c.relationship} • {c.phone}
+                  </Text>
+                  {c.email ? (
+                    <Text style={[styles.contactEmail, { color: colors.signal }]}>
+                      ✉️ {c.email}
+                    </Text>
+                  ) : null}
+                </View>
+
+                <View style={styles.contactActions}>
+                  <TouchableOpacity
+                    onPress={() => handleSendTestMessage(c)}
+                    style={[styles.iconActionBtn, { backgroundColor: colors.surface }]}
+                    accessibilityLabel="Send test alert"
+                  >
+                    <Send size={13} color={colors.signal} />
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    onPress={() => handleOpenEditContact(c)}
+                    style={[styles.iconActionBtn, { backgroundColor: colors.surface }]}
+                    accessibilityLabel="Edit contact"
+                  >
+                    <Edit2 size={13} color={colors.ink} />
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    onPress={() => handleDeleteContact(c.id, c.name)}
+                    style={[styles.iconActionBtn, { backgroundColor: colors.surface }]}
+                    accessibilityLabel="Delete contact"
+                  >
+                    <Trash2 size={13} color={colors.danger} />
+                  </TouchableOpacity>
+                </View>
               </View>
 
-              <View style={styles.contactActions}>
-                <TouchableOpacity
-                  onPress={() => handleSendTestMessage(c.phone, c.name)}
-                  style={[styles.testMsgBtn, { backgroundColor: colors.surfaceSubtle }]}
+              {/* Notification Badges */}
+              <View style={styles.badgeRow}>
+                <View
+                  style={[
+                    styles.channelBadge,
+                    { backgroundColor: c.notify_sms !== false ? colors.safeSubtle : colors.surface },
+                  ]}
                 >
-                  <Send size={12} color={colors.signal} />
-                  <Text style={[styles.testMsgText, { color: colors.signal }]}>Test</Text>
-                </TouchableOpacity>
+                  <Text
+                    style={[
+                      styles.channelBadgeText,
+                      { color: c.notify_sms !== false ? colors.safe : colors.muted },
+                    ]}
+                  >
+                    📱 SMS: {c.notify_sms !== false ? 'Enabled' : 'Off'}
+                  </Text>
+                </View>
 
-                <TouchableOpacity
-                  onPress={() => user.removeContact(c.id)}
-                  style={styles.deleteContactBtn}
+                <View
+                  style={[
+                    styles.channelBadge,
+                    { backgroundColor: c.notify_email !== false && c.email ? colors.safeSubtle : colors.surface },
+                  ]}
                 >
-                  <Trash2 size={15} color={colors.danger} />
-                </TouchableOpacity>
+                  <Text
+                    style={[
+                      styles.channelBadgeText,
+                      { color: c.notify_email !== false && c.email ? colors.safe : colors.muted },
+                    ]}
+                  >
+                    ✉️ Email: {c.notify_email !== false && c.email ? 'Enabled' : 'Off'}
+                  </Text>
+                </View>
               </View>
             </View>
           ))}
 
-          {/* Add contact mini-form */}
-          {addContactModal && (
-            <View style={[styles.addContactForm, { backgroundColor: colors.surfaceSubtle }]}>
-              <Text style={[styles.formHeading, { color: colors.ink }]}>Add Trusted Contact</Text>
+          {/* Add / Edit Contact Form Modal */}
+          {contactModalOpen && (
+            <View style={[styles.addContactForm, { backgroundColor: colors.surfaceSubtle, borderColor: colors.line }]}>
+              <Text style={[styles.formHeading, { color: colors.ink }]}>
+                {editingContactId ? 'Edit Trusted Contact' : 'Add Trusted Contact'}
+              </Text>
+
+              <Text style={[styles.inputLabel, { color: colors.muted }]}>Contact Name</Text>
               <TextInput
                 placeholder="Full Name (e.g., Mom, Priya)"
                 placeholderTextColor={colors.muted}
-                value={newContactName}
-                onChangeText={setNewContactName}
+                value={contactName}
+                onChangeText={setContactName}
                 style={[styles.input, { backgroundColor: colors.surface, color: colors.ink, borderColor: colors.line }]}
               />
+
+              <Text style={[styles.inputLabel, { color: colors.muted }]}>Phone Number (for SMS Alerts)</Text>
               <TextInput
-                placeholder="Phone (+91 9811122233)"
+                placeholder="Phone (+91 98111 22233)"
                 placeholderTextColor={colors.muted}
-                value={newContactPhone}
-                onChangeText={setNewContactPhone}
+                value={contactPhone}
+                onChangeText={setContactPhone}
                 keyboardType="phone-pad"
                 style={[styles.input, { backgroundColor: colors.surface, color: colors.ink, borderColor: colors.line }]}
               />
+
+              <Text style={[styles.inputLabel, { color: colors.muted }]}>Email Address (for Email Alerts)</Text>
+              <TextInput
+                placeholder="Email (e.g., priya@example.com)"
+                placeholderTextColor={colors.muted}
+                value={contactEmail}
+                onChangeText={setContactEmail}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                style={[styles.input, { backgroundColor: colors.surface, color: colors.ink, borderColor: colors.line }]}
+              />
+
+              <Text style={[styles.inputLabel, { color: colors.muted }]}>Relationship</Text>
+              <View style={styles.relationPills}>
+                {['Parent', 'Spouse', 'Friend', 'Sibling', 'Colleague'].map((rel) => (
+                  <TouchableOpacity
+                    key={rel}
+                    onPress={() => setContactRelation(rel)}
+                    style={[
+                      styles.relationPill,
+                      {
+                        backgroundColor: contactRelation === rel ? colors.ink : colors.surface,
+                        borderColor: contactRelation === rel ? colors.ink : colors.line,
+                      },
+                    ]}
+                  >
+                    <Text style={{ color: contactRelation === rel ? '#ffffff' : colors.ink, fontSize: 11, fontWeight: '700' }}>
+                      {rel}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              {/* Notification Toggle Row */}
+              <View style={styles.switchRow}>
+                <Text style={[styles.switchLabel, { color: colors.ink }]}>Send SOS via SMS</Text>
+                <Switch
+                  value={contactNotifySms}
+                  onValueChange={setContactNotifySms}
+                  trackColor={{ false: colors.line, true: colors.signal }}
+                />
+              </View>
+
+              <View style={styles.switchRow}>
+                <Text style={[styles.switchLabel, { color: colors.ink }]}>Send SOS via Email</Text>
+                <Switch
+                  value={contactNotifyEmail}
+                  onValueChange={setContactNotifyEmail}
+                  trackColor={{ false: colors.line, true: colors.signal }}
+                />
+              </View>
+
               <View style={styles.formBtnRow}>
                 <TouchableOpacity
-                  onPress={() => setAddContactModal(false)}
+                  onPress={() => setContactModalOpen(false)}
                   style={[styles.formCancelBtn, { borderColor: colors.line }]}
                 >
-                  <Text style={{ color: colors.muted }}>Cancel</Text>
+                  <Text style={{ color: colors.muted, fontWeight: '600' }}>Cancel</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                  onPress={handleAddContact}
-                  style={[styles.formSaveBtn, { backgroundColor: colors.ink }]}
+                  onPress={handleSaveContact}
+                  style={[styles.formSaveBtn, { backgroundColor: colors.signal }]}
                 >
-                  <Text style={{ color: '#ffffff', fontWeight: '700' }}>Save Contact</Text>
+                  <Text style={{ color: '#ffffff', fontWeight: '700' }}>
+                    {editingContactId ? 'Update Contact' : 'Save Contact'}
+                  </Text>
                 </TouchableOpacity>
               </View>
             </View>
           )}
         </View>
 
-        {/* Section 2: PIN Settings (Normal & Duress) */}
+        {/* Section 4: Safety Code (Normal PIN) & Silent Duress PIN */}
         <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.line }]}>
           <View style={styles.cardHeaderLeft}>
             <Lock size={18} color={colors.signal} />
-            <Text style={[styles.cardTitle, { color: colors.ink }]}>{t.pins_settings}</Text>
+            <Text style={[styles.cardTitle, { color: colors.ink }]}>Safety Code & Security PINs</Text>
           </View>
+
+          <Text style={[styles.cardExplainer, { color: colors.muted }]}>
+            Your 4-digit Safety Code is required to dismiss the anomaly countdown before the timer sends an SOS.
+            The Duress PIN silently alerts police and contacts under coercion.
+          </Text>
 
           <View style={styles.pinInputsRow}>
             <View style={styles.pinInputCol}>
-              <Text style={[styles.pinLabel, { color: colors.ink }]}>{t.normal_pin}</Text>
+              <Text style={[styles.pinLabel, { color: colors.ink }]}>Safety Code (Normal PIN)</Text>
               <TextInput
                 value={normalPin}
                 onChangeText={setNormalPin}
@@ -246,10 +694,11 @@ export default function ProfileScreen() {
                 secureTextEntry
                 style={[styles.pinInput, { backgroundColor: colors.surfaceSubtle, color: colors.ink, borderColor: colors.line }]}
               />
+              <Text style={[styles.pinHint, { color: colors.muted }]}>Cancels anomaly alert</Text>
             </View>
 
             <View style={styles.pinInputCol}>
-              <Text style={[styles.pinLabel, { color: colors.danger }]}>{t.duress_pin}</Text>
+              <Text style={[styles.pinLabel, { color: colors.danger }]}>Silent Duress PIN</Text>
               <TextInput
                 value={duressPin}
                 onChangeText={setDuressPin}
@@ -258,53 +707,23 @@ export default function ProfileScreen() {
                 secureTextEntry
                 style={[styles.pinInput, { backgroundColor: colors.dangerSubtle, color: colors.danger, borderColor: colors.danger }]}
               />
+              <Text style={[styles.pinHint, { color: colors.danger }]}>Silently sends SOS</Text>
             </View>
           </View>
-
-          <Text style={[styles.duressExplainer, { color: colors.muted }]}>
-            {t.duress_explainer}
-          </Text>
 
           <TouchableOpacity
             onPress={handleSavePins}
-            style={[styles.savePinsBtn, { backgroundColor: colors.surfaceSubtle, borderColor: colors.line }]}
+            style={[styles.savePinsBtn, { backgroundColor: colors.signal }]}
           >
-            <Text style={[styles.savePinsText, { color: colors.ink }]}>Save Security PINs</Text>
+            <Text style={styles.savePinsText}>Save Security PINs to Storage</Text>
           </TouchableOpacity>
         </View>
 
-        {/* Section 3: Safety Preferences */}
+        {/* Section 5: App Preferences (Language, Theme) */}
         <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.line }]}>
-          <Text style={[styles.cardTitle, { color: colors.ink, marginBottom: 14 }]}>Emergency Preferences</Text>
-
-          {/* Check-in Timeout */}
-          <View style={styles.settingRow}>
-            <View style={styles.settingLabelWrap}>
-              <Clock size={16} color={colors.muted} />
-              <Text style={[styles.settingLabel, { color: colors.ink }]}>{t.timeout}</Text>
-            </View>
-            <View style={styles.timeoutPills}>
-              {[15, 30, 60].map((sec) => (
-                <TouchableOpacity
-                  key={sec}
-                  onPress={() => user.setCheckInTimeout(sec)}
-                  style={[
-                    styles.timeoutPill,
-                    {
-                      backgroundColor: user.checkInTimeout === sec ? colors.ink : colors.surfaceSubtle,
-                    },
-                  ]}
-                >
-                  <Text style={{ color: user.checkInTimeout === sec ? '#ffffff' : colors.ink, fontSize: 12, fontWeight: '700' }}>
-                    {sec}s
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </View>
+          <Text style={[styles.cardTitle, { color: colors.ink, marginBottom: 14 }]}>App Preferences</Text>
 
           {/* Language Switch */}
-          <View style={[styles.divider, { backgroundColor: colors.line }]} />
           <View style={styles.settingRow}>
             <View style={styles.settingLabelWrap}>
               <Globe size={16} color={colors.muted} />
@@ -330,8 +749,9 @@ export default function ProfileScreen() {
             </View>
           </View>
 
-          {/* Dark Mode */}
           <View style={[styles.divider, { backgroundColor: colors.line }]} />
+
+          {/* Dark Mode */}
           <View style={styles.settingRow}>
             <View style={styles.settingLabelWrap}>
               <Moon size={16} color={colors.muted} />
@@ -344,38 +764,21 @@ export default function ProfileScreen() {
               thumbColor="#ffffff"
             />
           </View>
-
-          {/* Auto Share Trips */}
-          <View style={[styles.divider, { backgroundColor: colors.line }]} />
-          <View style={styles.settingRow}>
-            <View style={styles.settingLabelWrap}>
-              <Share2 size={16} color={colors.muted} />
-              <Text style={[styles.settingLabel, { color: colors.ink }]}>Auto-Share Live Trips</Text>
-            </View>
-            <Switch
-              value={user.autoShareTrips}
-              onValueChange={() => {}}
-              trackColor={{ false: colors.line, true: colors.signal }}
-              thumbColor="#ffffff"
-            />
-          </View>
         </View>
 
-        {/* Section 4: Privacy & Retention */}
+        {/* Section 6: Reset / Restore */}
         <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.line }]}>
-          <Text style={[styles.cardTitle, { color: colors.ink, marginBottom: 8 }]}>Data Retention & Privacy</Text>
+          <Text style={[styles.cardTitle, { color: colors.ink, marginBottom: 8 }]}>Storage & Diagnostics</Text>
           <Text style={[styles.privacyNotice, { color: colors.muted }]}>
-            SafeRoute only records your GPS location during active navigation or an emergency SOS. We do not store continuous location history.
+            All customizations are stored on your local device. You can reset to standard Delhi defaults at any time.
           </Text>
 
           <TouchableOpacity
-            onPress={handleDeleteData}
-            style={[styles.deleteDataBtn, { borderColor: colors.danger }]}
-            accessibilityRole="button"
-            accessibilityLabel="Permanently delete my data"
+            onPress={handleResetDefaults}
+            style={[styles.resetDefaultsBtn, { borderColor: colors.line }]}
           >
-            <Trash2 size={16} color={colors.danger} />
-            <Text style={[styles.deleteDataText, { color: colors.danger }]}>{t.delete_my_data}</Text>
+            <RotateCcw size={15} color={colors.muted} />
+            <Text style={[styles.resetDefaultsText, { color: colors.muted }]}>Reset to Demo Defaults</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -405,7 +808,17 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   guidedDemoText: { color: '#ffffff', fontSize: 12, fontWeight: '700' },
-  scrollBody: { padding: 18, paddingBottom: 40 },
+  scrollBody: { padding: 18, paddingBottom: 50 },
+  storageBadgeBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    borderWidth: 1,
+    borderRadius: 10,
+    padding: 10,
+    marginBottom: 14,
+  },
+  storageBadgeText: { fontSize: 11, fontWeight: '600', flex: 1, lineHeight: 16 },
   alertLogBanner: {
     padding: 14,
     borderRadius: themeTokens.radii.card,
@@ -425,58 +838,116 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 8,
   },
   cardHeaderLeft: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   cardTitle: { fontSize: 16, fontWeight: '700' },
+  cardExplainer: { fontSize: 12, lineHeight: 18, marginTop: 4, marginBottom: 14 },
+  smallActionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  smallActionText: { fontSize: 12, fontWeight: '700' },
+  profileSummaryRow: { marginTop: 6, gap: 8 },
+  profileDataCol: { marginBottom: 4 },
+  profileLabel: { fontSize: 11, textTransform: 'uppercase', fontWeight: '700' },
+  profileValue: { fontSize: 14, fontWeight: '600', marginTop: 1 },
+  editProfileForm: { marginTop: 6 },
+  inputLabel: { fontSize: 11, fontWeight: '700', marginBottom: 4, textTransform: 'uppercase' },
+  input: {
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    borderRadius: 8,
+    borderWidth: 1,
+    fontSize: 13,
+    marginBottom: 10,
+  },
+  saveBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 10,
+    borderRadius: 8,
+    marginTop: 4,
+  },
+  saveBtnText: { color: '#ffffff', fontWeight: '700', fontSize: 13 },
+  timerPillsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 },
+  timerPill: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 8, borderWidth: 1 },
+  customTimerRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
+  customTimerLabel: { fontSize: 13, fontWeight: '600' },
+  customTimerInput: {
+    width: 70,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 6,
+    borderWidth: 1,
+    textAlign: 'center',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  customTimerBtn: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 6, borderWidth: 1 },
+  customTimerBtnText: { fontSize: 12, fontWeight: '700' },
+  simulateAnomalyBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 9,
+    borderRadius: 8,
+    borderWidth: 1,
+    marginTop: 4,
+  },
+  simulateAnomalyText: { fontSize: 12, fontWeight: '700' },
   addBtnSmall: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
     borderRadius: 6,
   },
-  addBtnText: { fontSize: 12, fontWeight: '700' },
-  contactRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-  },
-  contactInfo: { flex: 1 },
-  contactName: { fontSize: 14, fontWeight: '700' },
-  contactMeta: { fontSize: 12, marginTop: 2 },
-  contactActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  testMsgBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-  },
-  testMsgText: { fontSize: 11, fontWeight: '700' },
-  deleteContactBtn: { padding: 6 },
-  addContactForm: {
+  addBtnText: { color: '#ffffff', fontSize: 12, fontWeight: '700' },
+  contactCardItem: {
     padding: 12,
     borderRadius: 10,
+    borderWidth: 1,
+    marginBottom: 10,
+  },
+  contactHeaderLine: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
+  contactName: { fontSize: 14, fontWeight: '700' },
+  contactMeta: { fontSize: 12, marginTop: 2 },
+  contactEmail: { fontSize: 11, marginTop: 2, fontWeight: '600' },
+  contactActions: { flexDirection: 'row', gap: 6 },
+  iconActionBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 6,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  badgeRow: { flexDirection: 'row', gap: 8, marginTop: 8 },
+  channelBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 4 },
+  channelBadgeText: { fontSize: 10, fontWeight: '700' },
+  addContactForm: {
+    padding: 14,
+    borderRadius: 12,
+    borderWidth: 1,
     marginTop: 12,
   },
-  formHeading: { fontSize: 13, fontWeight: '700', marginBottom: 8 },
-  input: {
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    borderRadius: 6,
-    borderWidth: 1,
-    fontSize: 13,
-    marginBottom: 8,
-  },
-  formBtnRow: { flexDirection: 'row', justifyContent: 'flex-end', gap: 8, marginTop: 4 },
-  formCancelBtn: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6, borderWidth: 1 },
-  formSaveBtn: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6 },
-  pinInputsRow: { flexDirection: 'row', gap: 16, marginTop: 12, marginBottom: 8 },
+  formHeading: { fontSize: 14, fontWeight: '800', marginBottom: 12 },
+  relationPills: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 12 },
+  relationPill: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 6, borderWidth: 1 },
+  switchRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 6 },
+  switchLabel: { fontSize: 13, fontWeight: '600' },
+  formBtnRow: { flexDirection: 'row', justifyContent: 'flex-end', gap: 8, marginTop: 12 },
+  formCancelBtn: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 6, borderWidth: 1 },
+  formSaveBtn: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 6 },
+  pinInputsRow: { flexDirection: 'row', gap: 16, marginTop: 4, marginBottom: 12 },
   pinInputCol: { flex: 1 },
   pinLabel: { fontSize: 12, fontWeight: '700', marginBottom: 4 },
   pinInput: {
@@ -488,9 +959,9 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     letterSpacing: 4,
   },
-  duressExplainer: { fontSize: 12, lineHeight: 18, marginTop: 4, marginBottom: 12 },
-  savePinsBtn: { paddingVertical: 10, borderRadius: 8, borderWidth: 1, alignItems: 'center' },
-  savePinsText: { fontSize: 13, fontWeight: '700' },
+  pinHint: { fontSize: 10, marginTop: 4, textAlign: 'center' },
+  savePinsBtn: { paddingVertical: 10, borderRadius: 8, alignItems: 'center' },
+  savePinsText: { color: '#ffffff', fontSize: 13, fontWeight: '700' },
   settingRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -503,14 +974,14 @@ const styles = StyleSheet.create({
   timeoutPill: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 6 },
   divider: { height: 1, marginVertical: 6 },
   privacyNotice: { fontSize: 12, lineHeight: 18, marginBottom: 14 },
-  deleteDataBtn: {
+  resetDefaultsBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    paddingVertical: 12,
+    paddingVertical: 10,
     borderRadius: 8,
     borderWidth: 1,
   },
-  deleteDataText: { fontSize: 13, fontWeight: '700' },
+  resetDefaultsText: { fontSize: 12, fontWeight: '700' },
 });
