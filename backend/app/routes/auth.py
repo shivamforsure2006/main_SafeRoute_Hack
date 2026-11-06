@@ -4,7 +4,14 @@ from sqlalchemy import select, delete
 from typing import List
 from backend.app.db import get_db
 from backend.app.models.user import User, Contact
-from backend.app.schemas.user import UserLoginRequest, UserUpdateRequest, UserResponse, ContactCreate, ContactResponse
+from backend.app.schemas.user import (
+    UserLoginRequest,
+    GoogleLoginRequest,
+    UserUpdateRequest,
+    UserResponse,
+    ContactCreate,
+    ContactResponse
+)
 from backend.app.services.notify import notification_service
 
 router = APIRouter(prefix="/api", tags=["Auth & Profile"])
@@ -36,6 +43,47 @@ async def login_or_register(payload: UserLoginRequest, db: AsyncSession = Depend
         await db.refresh(user)
 
     # Reload contacts
+    c_res = await db.execute(select(Contact).where(Contact.user_id == user.id))
+    user.contacts = c_res.scalars().all()
+    return user
+
+@router.post("/auth/google", response_model=UserResponse)
+async def login_with_google(payload: GoogleLoginRequest, db: AsyncSession = Depends(get_db)):
+    """Sign in with Google OAuth credentials/identity."""
+    email = payload.email.strip().lower()
+    result = await db.execute(select(User).where(User.email == email))
+    user = result.scalar_one_or_none()
+    
+    if not user:
+        # Create user linked to Google Account
+        gen_phone = f"+9198{abs(hash(email)) % 90000000 + 10000000}"
+        user = User(
+            phone=gen_phone,
+            email=email,
+            name=payload.name or "Google User",
+            avatar_url=payload.avatar_url,
+            normal_pin="1234",
+            duress_pin="9999",
+            language="en"
+        )
+        db.add(user)
+        await db.commit()
+        await db.refresh(user)
+        
+        # Seed default emergency contacts
+        c1 = Contact(user_id=user.id, name="Mom (Dr. Sunita)", phone="+919811122233", relationship="Parent")
+        c2 = Contact(user_id=user.id, name="Rohit (Partner)", phone="+919877788899", relationship="Spouse")
+        db.add_all([c1, c2])
+        await db.commit()
+        await db.refresh(user)
+    else:
+        if payload.name:
+            user.name = payload.name
+        if payload.avatar_url:
+            user.avatar_url = payload.avatar_url
+        await db.commit()
+        await db.refresh(user)
+
     c_res = await db.execute(select(Contact).where(Contact.user_id == user.id))
     user.contacts = c_res.scalars().all()
     return user

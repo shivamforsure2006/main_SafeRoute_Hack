@@ -25,6 +25,8 @@ class UserLoginRequest(BaseModel):
 
 class UserUpdateRequest(BaseModel):
     name: Optional[str] = None
+    email: Optional[str] = None
+    avatar_url: Optional[str] = None
     normal_pin: Optional[str] = None
     duress_pin: Optional[str] = None
     check_in_timeout: Optional[int] = None
@@ -39,10 +41,17 @@ class UserUpdateRequest(BaseModel):
     last_lat: Optional[float] = None
     last_lng: Optional[float] = None
 
+class GoogleLoginRequest(BaseModel):
+    email: str
+    name: Optional[str] = "Google User"
+    avatar_url: Optional[str] = None
+
 class UserResponse(BaseModel):
     id: str
     phone: str
     name: str
+    email: Optional[str] = None
+    avatar_url: Optional[str] = None
     normal_pin: str
     duress_pin: str
     check_in_timeout: int

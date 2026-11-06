@@ -167,3 +167,4 @@ export async function dispatchSOSAlertsToContacts(payload: DispatchSOSPayload): 
     totalNotified: smsCount + emailCount,
   };
 }
+

@@ -7,6 +7,9 @@ export interface StoredUserProfile {
   name: string;
   phone: string;
   email: string;
+  avatarUrl?: string;
+  isAuthenticated?: boolean;
+  authProvider?: 'google' | 'phone' | 'email' | 'demo' | null;
   normalPin: string;
   duressPin: string;
   checkInTimeout: number; // in seconds, default 60 (1 minute)
@@ -153,3 +156,4 @@ class StorageService {
 }
 
 export const appStorage = new StorageService();
+

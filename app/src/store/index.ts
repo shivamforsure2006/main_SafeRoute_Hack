@@ -13,6 +13,9 @@ export interface UserState {
   name: string;
   phone: string;
   email: string;
+  avatarUrl?: string;
+  isAuthenticated: boolean;
+  authProvider: 'google' | 'phone' | 'email' | 'demo' | null;
   normalPin: string; // Safety Code
   duressPin: string;
   language: Language;
@@ -26,7 +29,11 @@ export interface UserState {
   isDarkMode: boolean;
 
   // Actions
-  updateProfile: (profile: { name?: string; phone?: string; email?: string }) => void;
+  updateProfile: (profile: { name?: string; phone?: string; email?: string; avatarUrl?: string }) => void;
+  loginWithGoogle: (data: { name: string; email: string; avatarUrl?: string }) => Promise<void>;
+  loginWithPhone: (phone: string, otp?: string) => Promise<void>;
+  loginWithDemo: () => void;
+  logout: () => void;
   setLanguage: (lang: Language) => void;
   toggleDarkMode: () => void;
   updatePins: (normal: string, duress: string) => void;
@@ -44,6 +51,9 @@ const DEFAULT_PROFILE: StoredUserProfile = {
   name: 'Ananya Sharma',
   phone: '+919810012345',
   email: 'ananya.sharma@example.com',
+  avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&h=200&fit=crop&crop=faces',
+  isAuthenticated: true,
+  authProvider: 'demo',
   normalPin: '1234',
   duressPin: '9999',
   language: 'en',
@@ -92,6 +102,9 @@ function persistHelper(state: UserState) {
     name: state.name,
     phone: state.phone,
     email: state.email,
+    avatarUrl: state.avatarUrl,
+    isAuthenticated: state.isAuthenticated,
+    authProvider: state.authProvider,
     normalPin: state.normalPin,
     duressPin: state.duressPin,
     language: state.language,
@@ -107,6 +120,9 @@ export const useUserStore = create<UserState>((set, get) => ({
   name: initialStored.name || DEFAULT_PROFILE.name,
   phone: initialStored.phone || DEFAULT_PROFILE.phone,
   email: initialStored.email || DEFAULT_PROFILE.email,
+  avatarUrl: initialStored.avatarUrl || DEFAULT_PROFILE.avatarUrl,
+  isAuthenticated: initialStored.isAuthenticated ?? true,
+  authProvider: initialStored.authProvider || 'demo',
   normalPin: initialStored.normalPin || DEFAULT_PROFILE.normalPin,
   duressPin: initialStored.duressPin || DEFAULT_PROFILE.duressPin,
   language: (initialStored.language as Language) || DEFAULT_PROFILE.language,
@@ -119,12 +135,73 @@ export const useUserStore = create<UserState>((set, get) => ({
   isDarkMode: initialStored.isDarkMode ?? DEFAULT_PROFILE.isDarkMode,
   contacts: initialStored.contacts?.length ? initialStored.contacts : DEFAULT_PROFILE.contacts,
 
-  updateProfile: ({ name, phone, email }) => {
+  loginWithGoogle: async ({ name, email, avatarUrl }) => {
+    const res = await api.loginWithGoogle({ email, name, avatar_url: avatarUrl });
+    set((state) => {
+      const next = {
+        isAuthenticated: true,
+        authProvider: 'google' as const,
+        name: res.name || name,
+        email: res.email || email,
+        avatarUrl: avatarUrl || res.avatar_url || 'https://lh3.googleusercontent.com/a/default-user',
+        phone: res.phone || state.phone,
+      };
+      const updated = { ...state, ...next };
+      persistHelper(updated);
+      return next;
+    });
+  },
+
+  loginWithPhone: async (phone: string, otp = '123456') => {
+    const res = await api.loginWithPhone(phone, otp);
+    set((state) => {
+      const next = {
+        isAuthenticated: true,
+        authProvider: 'phone' as const,
+        name: res.name || state.name,
+        phone: res.phone || phone,
+      };
+      const updated = { ...state, ...next };
+      persistHelper(updated);
+      return next;
+    });
+  },
+
+  loginWithDemo: () => {
+    set((state) => {
+      const next = {
+        isAuthenticated: true,
+        authProvider: 'demo' as const,
+        name: 'Ananya Sharma',
+        phone: '+919810012345',
+        email: 'ananya.sharma@example.com',
+        avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&h=200&fit=crop&crop=faces',
+      };
+      const updated = { ...state, ...next };
+      persistHelper(updated);
+      return next;
+    });
+  },
+
+  logout: () => {
+    set((state) => {
+      const next = {
+        isAuthenticated: false,
+        authProvider: null,
+      };
+      const updated = { ...state, ...next };
+      persistHelper(updated);
+      return next;
+    });
+  },
+
+  updateProfile: ({ name, phone, email, avatarUrl }) => {
     set((state) => {
       const next = {
         name: name !== undefined ? name : state.name,
         phone: phone !== undefined ? phone : state.phone,
         email: email !== undefined ? email : state.email,
+        avatarUrl: avatarUrl !== undefined ? avatarUrl : state.avatarUrl,
       };
       const updated = { ...state, ...next };
       persistHelper(updated);
@@ -213,6 +290,9 @@ export const useUserStore = create<UserState>((set, get) => ({
         name: stored.name || DEFAULT_PROFILE.name,
         phone: stored.phone || DEFAULT_PROFILE.phone,
         email: stored.email || DEFAULT_PROFILE.email,
+        avatarUrl: stored.avatarUrl || DEFAULT_PROFILE.avatarUrl,
+        isAuthenticated: stored.isAuthenticated ?? DEFAULT_PROFILE.isAuthenticated,
+        authProvider: stored.authProvider ?? DEFAULT_PROFILE.authProvider,
         normalPin: stored.normalPin || DEFAULT_PROFILE.normalPin,
         duressPin: stored.duressPin || DEFAULT_PROFILE.duressPin,
         language: stored.language || DEFAULT_PROFILE.language,

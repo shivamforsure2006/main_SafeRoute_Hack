@@ -92,6 +92,46 @@ export const api = {
     }
   },
 
+  async loginWithGoogle(payload: { email: string; name?: string; avatar_url?: string }) {
+    try {
+      const res = await fetch(`${BASE_URL}/api/auth/google`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (res.ok) return await res.json();
+    } catch {}
+    return {
+      id: `google-${Date.now()}`,
+      name: payload.name || 'Google User',
+      email: payload.email,
+      phone: '+919810012345',
+      avatar_url: payload.avatar_url,
+      normal_pin: '1234',
+      duress_pin: '9999',
+      contacts: [],
+    };
+  },
+
+  async loginWithPhone(phone: string, otp = '123456') {
+    try {
+      const res = await fetch(`${BASE_URL}/api/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone, otp }),
+      });
+      if (res.ok) return await res.json();
+    } catch {}
+    return {
+      id: `phone-${Date.now()}`,
+      name: 'Delhi Commuter',
+      phone,
+      normal_pin: '1234',
+      duress_pin: '9999',
+      contacts: [],
+    };
+  },
+
   async geocodeSearch(query: string) {
     try {
       const res = await fetch(`${BASE_URL}/api/geocode/search?q=${encodeURIComponent(query)}`);

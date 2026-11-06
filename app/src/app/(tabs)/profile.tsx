@@ -9,6 +9,7 @@ import {
   TextInput,
   Switch,
   Alert,
+  Image,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import {
@@ -32,6 +33,7 @@ import {
   Database,
   AlertTriangle,
   RotateCcw,
+  LogOut,
 } from 'lucide-react-native';
 import { lightColors, darkColors, themeTokens } from '@/theme/tokens';
 import { useUserStore, useTripStore } from '@/store';
@@ -236,6 +238,25 @@ export default function ProfileScreen() {
     );
   };
 
+  // Sign Out handler
+  const handleSignOut = () => {
+    Alert.alert(
+      'Sign Out',
+      'Are you sure you want to sign out of SafeRoute? You can sign back in with Google or your phone number anytime.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Sign Out',
+          style: 'destructive',
+          onPress: () => {
+            user.logout();
+            router.replace('/auth' as any);
+          },
+        },
+      ]
+    );
+  };
+
   // Reset all to defaults
   const handleResetDefaults = () => {
     Alert.alert(
@@ -265,14 +286,39 @@ export default function ProfileScreen() {
     <SafeAreaView style={[styles.container, { backgroundColor: colors.paper }]}>
       {/* Header */}
       <View style={[styles.header, { backgroundColor: colors.surface, borderBottomColor: colors.line }]}>
-        <View>
-          <Text style={[styles.title, { color: colors.ink }]}>{user.name}</Text>
-          <Text style={[styles.sub, { color: colors.muted }]}>
-            {user.phone} • {user.email || 'Delhi NCR'}
-          </Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+          {user.avatarUrl ? (
+            <Image source={{ uri: user.avatarUrl }} style={styles.headerAvatar} />
+          ) : (
+            <View style={[styles.headerAvatarPlaceholder, { backgroundColor: colors.signal }]}>
+              <User size={20} color="#ffffff" />
+            </View>
+          )}
+          <View>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <Text style={[styles.title, { color: colors.ink }]}>{user.name}</Text>
+              {user.authProvider === 'google' && (
+                <View style={[styles.googleBadgePill, { backgroundColor: '#e8f0fe' }]}>
+                  <Text style={styles.googleBadgeText}>Google</Text>
+                </View>
+              )}
+            </View>
+            <Text style={[styles.sub, { color: colors.muted }]}>
+              {user.phone} • {user.email || 'Delhi NCR'}
+            </Text>
+          </View>
         </View>
 
         <View style={styles.headerBtnGroup}>
+          <TouchableOpacity
+            onPress={() => router.push('/auth' as any)}
+            style={[styles.switchAccountHeaderBtn, { borderColor: colors.line }]}
+            accessibilityRole="button"
+            accessibilityLabel="Switch or Sign In Account"
+          >
+            <Text style={[styles.switchAccountHeaderText, { color: colors.signal }]}>Account</Text>
+          </TouchableOpacity>
+
           <TouchableOpacity
             onPress={() => router.push('/guided-demo')}
             style={[styles.guidedDemoBtn, { backgroundColor: colors.signal }]}
@@ -325,6 +371,28 @@ export default function ProfileScreen() {
               <Text style={[styles.smallActionText, { color: colors.signal }]}>
                 {isEditingProfile ? 'Cancel' : 'Edit Profile'}
               </Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Account Authentication Status Banner */}
+          <View style={[styles.authStatusBanner, { backgroundColor: colors.surfaceSubtle, borderColor: colors.line }]}>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.authStatusTitle, { color: colors.ink }]}>
+                {user.authProvider === 'google'
+                  ? 'Google Account Connected'
+                  : user.authProvider === 'phone'
+                  ? 'Phone Verified'
+                  : 'Demo Resident Profile'}
+              </Text>
+              <Text style={[styles.authStatusSub, { color: colors.muted }]}>
+                {user.email ? user.email : user.phone}
+              </Text>
+            </View>
+            <TouchableOpacity
+              onPress={() => router.push('/auth' as any)}
+              style={[styles.switchAuthBtn, { borderColor: colors.line }]}
+            >
+              <Text style={[styles.switchAuthText, { color: colors.signal }]}>Switch</Text>
             </TouchableOpacity>
           </View>
 
@@ -384,6 +452,25 @@ export default function ProfileScreen() {
                   <Text style={[styles.profileValue, { color: colors.ink }]}>{user.email}</Text>
                 </View>
               ) : null}
+
+              {/* Authentication Actions */}
+              <View style={styles.authActionBtnRow}>
+                <TouchableOpacity
+                  onPress={() => router.push('/auth' as any)}
+                  style={[styles.accountOptionBtn, { borderColor: colors.line, backgroundColor: colors.surfaceSubtle }]}
+                >
+                  <User size={13} color={colors.ink} />
+                  <Text style={[styles.accountOptionText, { color: colors.ink }]}>Switch / Sign in with Google</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  onPress={handleSignOut}
+                  style={[styles.accountOptionBtn, { borderColor: colors.danger, backgroundColor: colors.dangerSubtle }]}
+                >
+                  <LogOut size={13} color={colors.danger} />
+                  <Text style={[styles.accountOptionText, { color: colors.danger }]}>Sign Out</Text>
+                </TouchableOpacity>
+              </View>
             </View>
           )}
         </View>
@@ -798,7 +885,21 @@ const styles = StyleSheet.create({
   },
   title: { fontSize: 20, fontWeight: '800' },
   sub: { fontSize: 12, marginTop: 2 },
-  headerBtnGroup: { flexDirection: 'row', gap: 8 },
+  headerAvatar: { width: 42, height: 42, borderRadius: 21 },
+  headerAvatarPlaceholder: { width: 42, height: 42, borderRadius: 21, justifyContent: 'center', alignItems: 'center' },
+  googleBadgePill: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 10 },
+  googleBadgeText: { fontSize: 10, fontWeight: '800', color: '#1a73e8' },
+  switchAccountHeaderBtn: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, borderWidth: 1, justifyContent: 'center', alignItems: 'center' },
+  switchAccountHeaderText: { fontSize: 12, fontWeight: '700' },
+  headerBtnGroup: { flexDirection: 'row', gap: 8, alignItems: 'center' },
+  authStatusBanner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 10, borderRadius: 8, borderWidth: 1, marginBottom: 12 },
+  authStatusTitle: { fontSize: 12, fontWeight: '800' },
+  authStatusSub: { fontSize: 11, marginTop: 1 },
+  switchAuthBtn: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 6, borderWidth: 1 },
+  switchAuthText: { fontSize: 11, fontWeight: '700' },
+  authActionBtnRow: { flexDirection: 'row', gap: 8, marginTop: 14 },
+  accountOptionBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 8, borderRadius: 8, borderWidth: 1 },
+  accountOptionText: { fontSize: 11, fontWeight: '700' },
   guidedDemoBtn: {
     flexDirection: 'row',
     alignItems: 'center',

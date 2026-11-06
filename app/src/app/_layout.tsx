@@ -19,6 +19,7 @@ export default function RootLayout() {
       <StatusBar style={isDarkMode ? 'light' : 'dark'} />
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+        <Stack.Screen name="auth" options={{ headerShown: false }} />
         <Stack.Screen name="onboarding" options={{ headerShown: false }} />
         <Stack.Screen name="sent-messages" options={{ headerShown: false }} />
         <Stack.Screen name="guided-demo" options={{ headerShown: false }} />

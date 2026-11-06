@@ -10,6 +10,8 @@ class User(Base):
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     phone = Column(String(20), unique=True, index=True, nullable=False)
     name = Column(String(100), default="User")
+    email = Column(String(100), nullable=True, index=True)
+    avatar_url = Column(String(300), nullable=True)
     
     # Security PINs
     normal_pin = Column(String(10), default="1234")
