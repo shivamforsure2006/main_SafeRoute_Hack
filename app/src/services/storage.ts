@@ -29,8 +29,22 @@ export interface StoredSentMessage {
   created_at: string;
 }
 
+export interface StoredPastTrip {
+  id: string;
+  date: string;
+  origin: string;
+  destination: string;
+  safetyScore: number;
+  durationMin: number;
+  distanceKm: number;
+  status: 'ARRIVED_SAFELY' | 'SOS_TRIGGERED' | 'CANCELLED';
+  summary: string;
+  created_at: string;
+}
+
 const PROFILE_KEY = 'saferoute_user_profile_v2';
 const MESSAGES_KEY = 'saferoute_sent_messages_v2';
+const TRIPS_KEY = 'saferoute_user_past_trips_v1';
 
 class StorageService {
   private memoryFallback: Record<string, string> = {};
@@ -152,6 +166,52 @@ class StorageService {
 
   async clearSentMessages(): Promise<void> {
     await this.removeItem(MESSAGES_KEY);
+  }
+
+  async loadPastTrips(): Promise<StoredPastTrip[]> {
+    try {
+      const raw = await this.getItem(TRIPS_KEY);
+      if (raw) {
+        return JSON.parse(raw);
+      }
+    } catch (e) {
+      console.warn('Failed to load past trips:', e);
+    }
+    return [];
+  }
+
+  loadPastTripsSync(): StoredPastTrip[] {
+    try {
+      const raw = this.getSyncItem(TRIPS_KEY);
+      if (raw) {
+        return JSON.parse(raw);
+      }
+    } catch {}
+    return [];
+  }
+
+  async savePastTrip(trip: StoredPastTrip): Promise<void> {
+    try {
+      const current = await this.loadPastTrips();
+      const updated = [trip, ...current.filter((t) => t.id !== trip.id)].slice(0, 100);
+      await this.setItem(TRIPS_KEY, JSON.stringify(updated));
+    } catch (e) {
+      console.warn('Failed to save past trip:', e);
+    }
+  }
+
+  async deletePastTrip(tripId: string): Promise<void> {
+    try {
+      const current = await this.loadPastTrips();
+      const updated = current.filter((t) => t.id !== tripId);
+      await this.setItem(TRIPS_KEY, JSON.stringify(updated));
+    } catch (e) {
+      console.warn('Failed to delete past trip:', e);
+    }
+  }
+
+  async clearPastTrips(): Promise<void> {
+    await this.removeItem(TRIPS_KEY);
   }
 }
 
