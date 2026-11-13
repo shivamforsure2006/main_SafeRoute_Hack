@@ -16,20 +16,20 @@ export const lightColors = {
 };
 
 export const darkColors = {
-  ink: '#fbfaf7',
-  paper: '#0f1222',
-  surface: '#1a1e38',
-  surfaceSubtle: '#24294d',
-  line: '#2c325c',
-  muted: '#9da0b5',
-  signal: '#5d6ef2',
-  signalSubtle: '#1f254e',
-  safe: '#27ae60',
-  safeSubtle: '#132f22',
-  caution: '#f39c12',
-  cautionSubtle: '#33280e',
-  danger: '#e74c3c',
-  dangerSubtle: '#3b1a19',
+  ink: '#ecfdf5',           // Crisp mint white text for high contrast readability
+  paper: '#031e17',         // Deep dark emerald green background
+  surface: '#073327',       // Elevated dark emerald container
+  surfaceSubtle: '#0c4233', // Subtle emerald card / chip surface
+  line: '#155e4b',          // Emerald divider / border
+  muted: '#84c4ad',         // Sage mint secondary text
+  signal: '#10b981',        // Vibrant emerald action & active indicator
+  signalSubtle: '#064e3b',  // Dark emerald pill background
+  safe: '#22c55e',          // Bright safe green
+  safeSubtle: '#093a2b',
+  caution: '#f59e0b',       // Warm caution amber
+  cautionSubtle: '#382506',
+  danger: '#ef4444',        // High-contrast danger red
+  dangerSubtle: '#421715',
 };
 
 export const themeTokens = {

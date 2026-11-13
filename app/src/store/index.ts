@@ -570,6 +570,33 @@ export const useTripStore = create<TripState>((set, get) => ({
   endTrip: async () => {
     const state = get();
     stopEmergencyVibration();
+
+    // Automatically record completed trip into browser's local storage
+    if (state.selectedRoute) {
+      const now = new Date();
+      const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      const dateStr = now.toLocaleDateString([], { month: 'short', day: 'numeric' });
+      const durationMin = Math.ceil(state.selectedRoute.duration_s / 60);
+      const distanceKm = Number((state.selectedRoute.distance_m / 1000).toFixed(1));
+
+      try {
+        await appStorage.savePastTrip({
+          id: `trip-${Date.now()}`,
+          date: `${dateStr}, ${timeStr}`,
+          origin: state.origin.name,
+          destination: state.destination.name,
+          safetyScore: state.selectedRoute.safety_score,
+          durationMin,
+          distanceKm,
+          status: 'ARRIVED_SAFELY',
+          summary: `Completed journey to ${state.destination.name}. Traveled along monitored safe corridor.`,
+          created_at: now.toISOString(),
+        });
+      } catch (err) {
+        console.warn('Failed saving trip to local storage', err);
+      }
+    }
+
     if (state.activeTripId) {
       await api.endTrip(state.activeTripId);
     }

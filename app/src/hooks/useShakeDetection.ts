@@ -8,6 +8,7 @@ export function useShakeDetection() {
   const shakeCountRef = useRef(0);
   const lastShakeTimeRef = useRef(0);
   const shakeSensitivity = useUserStore((s) => s.shakeSensitivity);
+  const triggerCheckIn = useTripStore((s) => s.triggerCheckIn);
   const triggerSOS = useTripStore((s) => s.triggerSOS);
 
   useEffect(() => {
@@ -27,7 +28,7 @@ export function useShakeDetection() {
           lastShakeTimeRef.current = now;
           if (shakeCountRef.current >= 3) {
             shakeCountRef.current = 0;
-            triggerSOS('SHAKE_GESTURE');
+            triggerCheckIn('Shake gesture / motion impact detected');
           }
         }
       };
@@ -75,9 +76,9 @@ export function useShakeDetection() {
             if (shakeCountRef.current >= 3) {
               shakeCountRef.current = 0;
               try {
-                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
               } catch (_) {}
-              triggerSOS('SHAKE_GESTURE');
+              triggerCheckIn('Shake gesture / fall impact detected');
             }
           }
         });

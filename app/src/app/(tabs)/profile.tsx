@@ -9,7 +9,7 @@ import {
   TextInput,
   Switch,
   Alert,
-  Image,
+  Modal,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import {
@@ -24,16 +24,14 @@ import {
   Moon,
   Trash2,
   Edit2,
-  Send,
   Plus,
-  PlayCircle,
   MessageSquare,
-  Share2,
   CheckCircle2,
   Database,
-  AlertTriangle,
   RotateCcw,
-  LogOut,
+  X,
+  Send,
+  AlertCircle,
 } from 'lucide-react-native';
 import { lightColors, darkColors, themeTokens } from '@/theme/tokens';
 import { useUserStore, useTripStore } from '@/store';
@@ -73,7 +71,7 @@ export default function ProfileScreen() {
   const [contactNotifySms, setContactNotifySms] = useState(true);
   const [contactNotifyEmail, setContactNotifyEmail] = useState(true);
 
-  // Save Name & Phone & Email to local storage
+  // Save Name, Phone & Email directly to browser local storage
   const handleSaveProfile = () => {
     if (!profileName.trim()) {
       Alert.alert('Required', 'Please enter your name.');
@@ -89,7 +87,7 @@ export default function ProfileScreen() {
       email: profileEmail.trim(),
     });
     setIsEditingProfile(false);
-    Alert.alert('Profile Saved', 'Your Name and Phone Number have been saved to local storage.');
+    Alert.alert('Profile Saved', 'Your name, phone number, and email have been saved to browser local storage.');
   };
 
   // Save PINs to local storage
@@ -146,7 +144,7 @@ export default function ProfileScreen() {
     setContactModalOpen(true);
   };
 
-  // Save contact (add or update)
+  // Save contact (add or update) to local storage
   const handleSaveContact = () => {
     if (!contactName.trim() || !contactPhone.trim()) {
       Alert.alert('Required', 'Please enter contact name and phone number.');
@@ -166,8 +164,8 @@ export default function ProfileScreen() {
       Alert.alert('Contact Updated', `${contactName} updated and saved to local storage.`);
     } else {
       // Add new contact
-      if (user.contacts.length >= 6) {
-        Alert.alert('Limit Reached', 'You can register up to 6 trusted emergency contacts.');
+      if (user.contacts.length >= 8) {
+        Alert.alert('Limit Reached', 'You can register up to 8 trusted emergency contacts.');
         return;
       }
       user.addContact({
@@ -185,7 +183,7 @@ export default function ProfileScreen() {
     setContactModalOpen(false);
   };
 
-  // Delete contact
+  // Delete contact from local storage
   const handleDeleteContact = (id: string, name: string) => {
     Alert.alert(
       'Remove Contact',
@@ -203,65 +201,11 @@ export default function ProfileScreen() {
     );
   };
 
-  // Send test verification alert
-  const handleSendTestMessage = async (c: TrustedContact) => {
-    const channels: string[] = [];
-    if (c.notify_sms !== false) channels.push(`SMS (${c.phone})`);
-    if (c.email && c.notify_email !== false) channels.push(`Email (${c.email})`);
-
-    const channelStr = channels.length > 0 ? channels.join(' & ') : `SMS (${c.phone})`;
-
-    // Record test message log
-    await appStorage.saveSentMessage({
-      id: `test-${Date.now()}`,
-      recipient: c.phone,
-      recipient_name: c.name,
-      channel: 'SMS',
-      title: `Verification Test to ${c.name}`,
-      content: `SafeRoute Test: ${user.name} tested their emergency alert channel with you. In case of an anomaly in Delhi, you will receive live GPS tracking links here.`,
-      status: 'SENT',
-      created_at: new Date().toISOString(),
-    });
-
-    Alert.alert(
-      'Test Alert Dispatched',
-      `Verification test dispatched to ${c.name} via ${channelStr}. This has been recorded in your Sent Alerts log.`
-    );
-  };
-
-  // Simulate Anomaly Alert right now
-  const handleSimulateAnomaly = () => {
-    trip.triggerCheckIn('Test Anomaly: Unscheduled 2-minute stationary stop detected');
-    Alert.alert(
-      'Anomaly Alert Triggered',
-      `A safety check-in has started with vibration! If you do not enter Safety Code ${user.normalPin} within ${user.checkInTimeout}s, emergency SOS alerts will be dispatched to your trusted contacts.`
-    );
-  };
-
-  // Sign Out handler
-  const handleSignOut = () => {
-    Alert.alert(
-      'Sign Out',
-      'Are you sure you want to sign out of SafeRoute? You can sign back in with Google or your phone number anytime.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Sign Out',
-          style: 'destructive',
-          onPress: () => {
-            user.logout();
-            router.replace('/auth' as any);
-          },
-        },
-      ]
-    );
-  };
-
-  // Reset all to defaults
+  // Reset profile to clean defaults
   const handleResetDefaults = () => {
     Alert.alert(
-      'Reset Settings',
-      'Reset name, contacts, PINs, and timer back to Delhi default demo data?',
+      'Reset Local Data',
+      'Reset all profile details, contacts, PINs, and timer back to default values?',
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -275,7 +219,7 @@ export default function ProfileScreen() {
             setNormalPin('1234');
             setDuressPin('9999');
             setCustomTimerInput('60');
-            Alert.alert('Reset Complete', 'Default settings restored and saved.');
+            Alert.alert('Reset Complete', 'Default local profile restored.');
           },
         },
       ]
@@ -287,81 +231,43 @@ export default function ProfileScreen() {
       {/* Header */}
       <View style={[styles.header, { backgroundColor: colors.surface, borderBottomColor: colors.line }]}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-          {user.avatarUrl ? (
-            <Image source={{ uri: user.avatarUrl }} style={styles.headerAvatar} />
-          ) : (
-            <View style={[styles.headerAvatarPlaceholder, { backgroundColor: colors.signal }]}>
-              <User size={20} color="#ffffff" />
-            </View>
-          )}
+          <View style={[styles.headerAvatarPlaceholder, { backgroundColor: colors.signal }]}>
+            <User size={22} color="#ffffff" />
+          </View>
           <View>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-              <Text style={[styles.title, { color: colors.ink }]}>{user.name}</Text>
-              {user.authProvider === 'google' && (
-                <View style={[styles.googleBadgePill, { backgroundColor: '#e8f0fe' }]}>
-                  <Text style={styles.googleBadgeText}>Google</Text>
-                </View>
-              )}
-            </View>
+            <Text style={[styles.title, { color: colors.ink }]}>{user.name}</Text>
             <Text style={[styles.sub, { color: colors.muted }]}>
-              {user.phone} • {user.email || 'Delhi NCR'}
+              {user.phone} {user.email ? `• ${user.email}` : ''}
             </Text>
           </View>
         </View>
 
-        <View style={styles.headerBtnGroup}>
-          <TouchableOpacity
-            onPress={() => router.push('/auth' as any)}
-            style={[styles.switchAccountHeaderBtn, { borderColor: colors.line }]}
-            accessibilityRole="button"
-            accessibilityLabel="Switch or Sign In Account"
-          >
-            <Text style={[styles.switchAccountHeaderText, { color: colors.signal }]}>Account</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            onPress={() => router.push('/guided-demo')}
-            style={[styles.guidedDemoBtn, { backgroundColor: colors.signal }]}
-            accessibilityRole="button"
-            accessibilityLabel="Run guided demo walkthrough"
-          >
-            <PlayCircle size={15} color="#ffffff" />
-            <Text style={styles.guidedDemoText}>Demo</Text>
-          </TouchableOpacity>
-        </View>
+        <TouchableOpacity
+          onPress={() => router.push('/sent-messages')}
+          style={[styles.headerActionBtn, { backgroundColor: colors.surfaceSubtle }]}
+          accessibilityRole="button"
+          accessibilityLabel="View sent alert messages"
+        >
+          <MessageSquare size={16} color={colors.signal} />
+          <Text style={[styles.headerActionText, { color: colors.signal }]}>Alerts</Text>
+        </TouchableOpacity>
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollBody} showsVerticalScrollIndicator={false}>
-        {/* Local Storage Intact Indicator */}
+        {/* Local Storage Status Banner */}
         <View style={[styles.storageBadgeBanner, { backgroundColor: colors.safeSubtle, borderColor: colors.safe }]}>
           <Database size={16} color={colors.safe} />
           <Text style={[styles.storageBadgeText, { color: colors.safe }]}>
-            Persisted in Local Storage: All profile details, trusted contacts, and emergency timers remain intact on this device.
+            Browser Local Storage Active: All personal details, emergency contacts, Safety PINs, and timers are securely persisted locally in your browser.
           </Text>
         </View>
-
-        {/* Quick Links: Sent Alerts */}
-        <TouchableOpacity
-          onPress={() => router.push('/sent-messages')}
-          style={[styles.alertLogBanner, { backgroundColor: colors.surfaceSubtle, borderColor: colors.line }]}
-        >
-          <View style={styles.alertLogIconText}>
-            <MessageSquare size={18} color={colors.signal} />
-            <View style={{ flex: 1 }}>
-              <Text style={[styles.alertLogTitle, { color: colors.ink }]}>Sent Emergency Alerts Log</Text>
-              <Text style={[styles.alertLogSub, { color: colors.muted }]}>
-                Review dispatched SMS, Email & WhatsApp emergency alerts
-              </Text>
-            </View>
-          </View>
-        </TouchableOpacity>
 
         {/* Section 1: User Profile Customisation (Name & Phone Number & Email) */}
         <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.line }]}>
           <View style={styles.cardHeaderRow}>
             <View style={styles.cardHeaderLeft}>
               <User size={18} color={colors.signal} />
-              <Text style={[styles.cardTitle, { color: colors.ink }]}>User Profile</Text>
+              <Text style={[styles.cardTitle, { color: colors.ink }]}>Personal Profile</Text>
             </View>
             <TouchableOpacity
               onPress={() => setIsEditingProfile(!isEditingProfile)}
@@ -369,30 +275,8 @@ export default function ProfileScreen() {
             >
               <Edit2 size={13} color={colors.signal} />
               <Text style={[styles.smallActionText, { color: colors.signal }]}>
-                {isEditingProfile ? 'Cancel' : 'Edit Profile'}
+                {isEditingProfile ? 'Cancel' : 'Edit Info'}
               </Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* Account Authentication Status Banner */}
-          <View style={[styles.authStatusBanner, { backgroundColor: colors.surfaceSubtle, borderColor: colors.line }]}>
-            <View style={{ flex: 1 }}>
-              <Text style={[styles.authStatusTitle, { color: colors.ink }]}>
-                {user.authProvider === 'google'
-                  ? 'Google Account Connected'
-                  : user.authProvider === 'phone'
-                  ? 'Phone Verified'
-                  : 'Demo Resident Profile'}
-              </Text>
-              <Text style={[styles.authStatusSub, { color: colors.muted }]}>
-                {user.email ? user.email : user.phone}
-              </Text>
-            </View>
-            <TouchableOpacity
-              onPress={() => router.push('/auth' as any)}
-              style={[styles.switchAuthBtn, { borderColor: colors.line }]}
-            >
-              <Text style={[styles.switchAuthText, { color: colors.signal }]}>Switch</Text>
             </TouchableOpacity>
           </View>
 
@@ -417,7 +301,7 @@ export default function ProfileScreen() {
                 style={[styles.input, { backgroundColor: colors.surfaceSubtle, color: colors.ink, borderColor: colors.line }]}
               />
 
-              <Text style={[styles.inputLabel, { color: colors.muted }]}>Email Address (for Emergency Notifications)</Text>
+              <Text style={[styles.inputLabel, { color: colors.muted }]}>Email Address (for SOS Dispatches)</Text>
               <TextInput
                 value={profileEmail}
                 onChangeText={setProfileEmail}
@@ -433,7 +317,7 @@ export default function ProfileScreen() {
                 style={[styles.saveBtn, { backgroundColor: colors.signal }]}
               >
                 <CheckCircle2 size={16} color="#ffffff" />
-                <Text style={styles.saveBtnText}>Save Profile to Storage</Text>
+                <Text style={styles.saveBtnText}>Save to Browser LocalStorage</Text>
               </TouchableOpacity>
             </View>
           ) : (
@@ -446,30 +330,9 @@ export default function ProfileScreen() {
                 <Text style={[styles.profileLabel, { color: colors.muted }]}>Phone</Text>
                 <Text style={[styles.profileValue, { color: colors.ink }]}>{user.phone}</Text>
               </View>
-              {user.email ? (
-                <View style={styles.profileDataCol}>
-                  <Text style={[styles.profileLabel, { color: colors.muted }]}>Email</Text>
-                  <Text style={[styles.profileValue, { color: colors.ink }]}>{user.email}</Text>
-                </View>
-              ) : null}
-
-              {/* Authentication Actions */}
-              <View style={styles.authActionBtnRow}>
-                <TouchableOpacity
-                  onPress={() => router.push('/auth' as any)}
-                  style={[styles.accountOptionBtn, { borderColor: colors.line, backgroundColor: colors.surfaceSubtle }]}
-                >
-                  <User size={13} color={colors.ink} />
-                  <Text style={[styles.accountOptionText, { color: colors.ink }]}>Switch / Sign in with Google</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  onPress={handleSignOut}
-                  style={[styles.accountOptionBtn, { borderColor: colors.danger, backgroundColor: colors.dangerSubtle }]}
-                >
-                  <LogOut size={13} color={colors.danger} />
-                  <Text style={[styles.accountOptionText, { color: colors.danger }]}>Sign Out</Text>
-                </TouchableOpacity>
+              <View style={styles.profileDataCol}>
+                <Text style={[styles.profileLabel, { color: colors.muted }]}>Email</Text>
+                <Text style={[styles.profileValue, { color: colors.ink }]}>{user.email || 'Not configured'}</Text>
               </View>
             </View>
           )}
@@ -480,14 +343,12 @@ export default function ProfileScreen() {
           <View style={styles.cardHeaderLeft}>
             <Clock size={18} color={colors.danger} />
             <Text style={[styles.cardTitle, { color: colors.ink }]}>
-              SOS Message Timer ({user.checkInTimeout}s / {(user.checkInTimeout / 60).toFixed(1)} min)
+              Anomaly SOS Timer ({user.checkInTimeout}s / {(user.checkInTimeout / 60).toFixed(1)} min)
             </Text>
           </View>
 
           <Text style={[styles.cardExplainer, { color: colors.muted }]}>
-            When an anomaly (route deviation, unusual stop) is detected, SafeRoute alerts you with{' '}
-            <Text style={{ fontWeight: '700', color: colors.ink }}>vibration</Text>. If you do not enter your Safety Code within this timer, an emergency SOS is dispatched to your trusted contacts via{' '}
-            <Text style={{ fontWeight: '700', color: colors.signal }}>Email & SMS</Text>.
+            When an anomaly (route deviation, stationary stop) occurs during a live trip, SafeRoute prompts you with an alert and starts this countdown. If you do not stop or dismiss it within this time, emergency SOS alerts are dispatched to your trusted contacts via Email & SMS.
           </Text>
 
           {/* Preset Pills */}
@@ -504,19 +365,16 @@ export default function ProfileScreen() {
                 style={[
                   styles.timerPill,
                   {
-                    backgroundColor:
-                      user.checkInTimeout === item.value ? colors.ink : colors.surfaceSubtle,
-                    borderColor:
-                      user.checkInTimeout === item.value ? colors.ink : colors.line,
+                    backgroundColor: user.checkInTimeout === item.value ? colors.signal : colors.surfaceSubtle,
+                    borderColor: user.checkInTimeout === item.value ? colors.signal : colors.line,
                   },
                 ]}
               >
                 <Text
-                  style={{
-                    color: user.checkInTimeout === item.value ? '#ffffff' : colors.ink,
-                    fontSize: 12,
-                    fontWeight: '700',
-                  }}
+                  style={[
+                    styles.timerPillText,
+                    { color: user.checkInTimeout === item.value ? '#ffffff' : colors.ink },
+                  ]}
                 >
                   {item.label}
                 </Text>
@@ -526,355 +384,319 @@ export default function ProfileScreen() {
 
           {/* Custom seconds input */}
           <View style={styles.customTimerRow}>
-            <Text style={[styles.customTimerLabel, { color: colors.ink }]}>Custom Seconds:</Text>
-            <TextInput
-              value={customTimerInput}
-              onChangeText={setCustomTimerInput}
-              keyboardType="numeric"
-              placeholder="60"
-              placeholderTextColor={colors.muted}
-              style={[
-                styles.customTimerInput,
-                { backgroundColor: colors.surfaceSubtle, color: colors.ink, borderColor: colors.line },
-              ]}
-            />
-            <TouchableOpacity
-              onPress={handleSaveCustomTimer}
-              style={[styles.customTimerBtn, { backgroundColor: colors.surfaceSubtle, borderColor: colors.line }]}
-            >
-              <Text style={[styles.customTimerBtnText, { color: colors.ink }]}>Set</Text>
-            </TouchableOpacity>
+            <Text style={[styles.customTimerLabel, { color: colors.muted }]}>Custom Duration (seconds):</Text>
+            <View style={styles.customTimerInputGroup}>
+              <TextInput
+                value={customTimerInput}
+                onChangeText={setCustomTimerInput}
+                keyboardType="number-pad"
+                placeholder="60"
+                placeholderTextColor={colors.muted}
+                style={[styles.customTimerInput, { backgroundColor: colors.surfaceSubtle, color: colors.ink, borderColor: colors.line }]}
+              />
+              <TouchableOpacity
+                onPress={handleSaveCustomTimer}
+                style={[styles.customTimerSaveBtn, { backgroundColor: colors.signal }]}
+              >
+                <Text style={styles.customTimerSaveBtnText}>Set</Text>
+              </TouchableOpacity>
+            </View>
           </View>
-
-          {/* Simulate Anomaly Button */}
-          <TouchableOpacity
-            onPress={handleSimulateAnomaly}
-            style={[styles.simulateAnomalyBtn, { backgroundColor: colors.cautionSubtle, borderColor: colors.caution }]}
-          >
-            <AlertTriangle size={15} color={colors.caution} />
-            <Text style={[styles.simulateAnomalyText, { color: colors.caution }]}>
-              Test Anomaly Vibration & Countdown Alert
-            </Text>
-          </TouchableOpacity>
         </View>
 
-        {/* Section 3: Trusted Emergency Contacts (Add, Edit, Delete, Email/SMS) */}
+        {/* Section 3: Trusted Emergency Contacts (Keep, Remove, Edit) */}
         <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.line }]}>
           <View style={styles.cardHeaderRow}>
             <View style={styles.cardHeaderLeft}>
-              <Phone size={18} color={colors.signal} />
+              <Phone size={18} color={colors.safe} />
               <Text style={[styles.cardTitle, { color: colors.ink }]}>
-                Trusted Contacts ({user.contacts.length}/6)
+                Trusted Contacts ({user.contacts.length})
               </Text>
             </View>
-            {user.contacts.length < 6 && (
-              <TouchableOpacity
-                onPress={handleOpenAddContact}
-                style={[styles.addBtnSmall, { backgroundColor: colors.signal }]}
-              >
-                <Plus size={14} color="#ffffff" />
-                <Text style={styles.addBtnText}>Add Contact</Text>
-              </TouchableOpacity>
-            )}
+            <TouchableOpacity
+              onPress={handleOpenAddContact}
+              style={[styles.addContactBtn, { backgroundColor: colors.signal }]}
+            >
+              <Plus size={14} color="#ffffff" />
+              <Text style={styles.addContactBtnText}>Add Contact</Text>
+            </TouchableOpacity>
           </View>
 
-          <Text style={[styles.cardExplainer, { color: colors.muted, marginBottom: 12 }]}>
-            These contacts will receive emergency SOS alerts via Email & SMS when an anomaly is detected and not disarmed.
+          <Text style={[styles.cardExplainer, { color: colors.muted }]}>
+            These contacts will receive immediate SMS & Email alerts containing your live GPS tracking link when an anomaly timer expires or panic SOS is triggered.
           </Text>
 
           {user.contacts.map((c) => (
-            <View key={c.id} style={[styles.contactCardItem, { backgroundColor: colors.surfaceSubtle, borderColor: colors.line }]}>
-              <View style={styles.contactHeaderLine}>
-                <View>
-                  <Text style={[styles.contactName, { color: colors.ink }]}>{c.name}</Text>
-                  <Text style={[styles.contactMeta, { color: colors.muted }]}>
-                    {c.relationship} • {c.phone}
-                  </Text>
+            <View
+              key={c.id}
+              style={[styles.contactCard, { backgroundColor: colors.surfaceSubtle, borderColor: colors.line }]}
+            >
+              <View style={styles.contactInfoRow}>
+                <View style={styles.contactTextCol}>
+                  <View style={styles.contactNameRow}>
+                    <Text style={[styles.contactName, { color: colors.ink }]}>{c.name}</Text>
+                    <View style={[styles.relationBadge, { backgroundColor: colors.surface, borderColor: colors.line }]}>
+                      <Text style={[styles.relationText, { color: colors.muted }]}>{c.relationship || 'Contact'}</Text>
+                    </View>
+                  </View>
+
+                  <Text style={[styles.contactPhone, { color: colors.muted }]}>📞 {c.phone}</Text>
                   {c.email ? (
-                    <Text style={[styles.contactEmail, { color: colors.signal }]}>
-                      ✉️ {c.email}
-                    </Text>
+                    <Text style={[styles.contactEmail, { color: colors.muted }]}>✉️ {c.email}</Text>
                   ) : null}
+
+                  {/* Channel Notification Badges */}
+                  <View style={styles.channelsRow}>
+                    <View style={[styles.channelChip, { backgroundColor: c.notify_sms !== false ? 'rgba(34, 197, 94, 0.15)' : colors.surface }]}>
+                      <Text style={[styles.channelChipText, { color: c.notify_sms !== false ? colors.safe : colors.muted }]}>
+                        {c.notify_sms !== false ? '✓ SMS' : '✕ SMS'}
+                      </Text>
+                    </View>
+                    <View style={[styles.channelChip, { backgroundColor: c.notify_email !== false && c.email ? 'rgba(16, 185, 129, 0.15)' : colors.surface }]}>
+                      <Text style={[styles.channelChipText, { color: c.notify_email !== false && c.email ? colors.signal : colors.muted }]}>
+                        {c.notify_email !== false && c.email ? '✓ Email' : '✕ Email'}
+                      </Text>
+                    </View>
+                  </View>
                 </View>
 
-                <View style={styles.contactActions}>
-                  <TouchableOpacity
-                    onPress={() => handleSendTestMessage(c)}
-                    style={[styles.iconActionBtn, { backgroundColor: colors.surface }]}
-                    accessibilityLabel="Send test alert"
-                  >
-                    <Send size={13} color={colors.signal} />
-                  </TouchableOpacity>
-
+                {/* Edit & Remove Action Buttons */}
+                <View style={styles.contactActionsCol}>
                   <TouchableOpacity
                     onPress={() => handleOpenEditContact(c)}
-                    style={[styles.iconActionBtn, { backgroundColor: colors.surface }]}
-                    accessibilityLabel="Edit contact"
+                    style={[styles.contactIconBtn, { backgroundColor: colors.surface }]}
+                    accessibilityLabel={`Edit ${c.name}`}
                   >
-                    <Edit2 size={13} color={colors.ink} />
+                    <Edit2 size={14} color={colors.signal} />
                   </TouchableOpacity>
 
                   <TouchableOpacity
                     onPress={() => handleDeleteContact(c.id, c.name)}
-                    style={[styles.iconActionBtn, { backgroundColor: colors.surface }]}
-                    accessibilityLabel="Delete contact"
+                    style={[styles.contactIconBtn, { backgroundColor: colors.surface }]}
+                    accessibilityLabel={`Remove ${c.name}`}
                   >
-                    <Trash2 size={13} color={colors.danger} />
+                    <Trash2 size={14} color={colors.danger} />
                   </TouchableOpacity>
-                </View>
-              </View>
-
-              {/* Notification Badges */}
-              <View style={styles.badgeRow}>
-                <View
-                  style={[
-                    styles.channelBadge,
-                    { backgroundColor: c.notify_sms !== false ? colors.safeSubtle : colors.surface },
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.channelBadgeText,
-                      { color: c.notify_sms !== false ? colors.safe : colors.muted },
-                    ]}
-                  >
-                    📱 SMS: {c.notify_sms !== false ? 'Enabled' : 'Off'}
-                  </Text>
-                </View>
-
-                <View
-                  style={[
-                    styles.channelBadge,
-                    { backgroundColor: c.notify_email !== false && c.email ? colors.safeSubtle : colors.surface },
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.channelBadgeText,
-                      { color: c.notify_email !== false && c.email ? colors.safe : colors.muted },
-                    ]}
-                  >
-                    ✉️ Email: {c.notify_email !== false && c.email ? 'Enabled' : 'Off'}
-                  </Text>
                 </View>
               </View>
             </View>
           ))}
+        </View>
 
-          {/* Add / Edit Contact Form Modal */}
-          {contactModalOpen && (
-            <View style={[styles.addContactForm, { backgroundColor: colors.surfaceSubtle, borderColor: colors.line }]}>
-              <Text style={[styles.formHeading, { color: colors.ink }]}>
+        {/* Section 4: Security PINs */}
+        <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.line }]}>
+          <View style={styles.cardHeaderLeft}>
+            <Lock size={18} color={colors.signal} />
+            <Text style={[styles.cardTitle, { color: colors.ink }]}>Security PIN Codes</Text>
+          </View>
+
+          <Text style={[styles.cardExplainer, { color: colors.muted }]}>
+            Use your <Text style={{ fontWeight: '700', color: colors.safe }}>Safety Code</Text> to dismiss check-ins. Use your secret <Text style={{ fontWeight: '700', color: colors.danger }}>Duress PIN</Text> if forced by an assailant to silence your phone (it visually dismisses the modal but triggers silent SOS in background).
+          </Text>
+
+          <View style={styles.pinsFormRow}>
+            <View style={styles.pinFieldCol}>
+              <Text style={[styles.inputLabel, { color: colors.safe }]}>Safety Code (Normal PIN)</Text>
+              <TextInput
+                value={normalPin}
+                onChangeText={setNormalPin}
+                maxLength={4}
+                keyboardType="number-pad"
+                secureTextEntry
+                placeholder="1234"
+                placeholderTextColor={colors.muted}
+                style={[styles.pinInput, { backgroundColor: colors.surfaceSubtle, color: colors.ink, borderColor: colors.line }]}
+              />
+            </View>
+
+            <View style={styles.pinFieldCol}>
+              <Text style={[styles.inputLabel, { color: colors.danger }]}>Duress PIN (Coercion)</Text>
+              <TextInput
+                value={duressPin}
+                onChangeText={setDuressPin}
+                maxLength={4}
+                keyboardType="number-pad"
+                secureTextEntry
+                placeholder="9999"
+                placeholderTextColor={colors.muted}
+                style={[styles.pinInput, { backgroundColor: colors.surfaceSubtle, color: colors.ink, borderColor: colors.line }]}
+              />
+            </View>
+          </View>
+
+          <TouchableOpacity
+            onPress={handleSavePins}
+            style={[styles.saveBtn, { backgroundColor: colors.signal, marginTop: 12 }]}
+          >
+            <CheckCircle2 size={16} color="#ffffff" />
+            <Text style={styles.saveBtnText}>Save Security PINs</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Section 5: Preferences (Dark Theme & Language) */}
+        <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.line }]}>
+          <View style={styles.cardHeaderLeft}>
+            <Moon size={18} color={colors.signal} />
+            <Text style={[styles.cardTitle, { color: colors.ink }]}>Display & Theme</Text>
+          </View>
+
+          {/* Dark Emerald Mode Toggle */}
+          <View style={styles.prefRow}>
+            <View>
+              <Text style={[styles.prefTitle, { color: colors.ink }]}>Dark Emerald Mode</Text>
+              <Text style={[styles.prefSub, { color: colors.muted }]}>
+                High-contrast night safety theme
+              </Text>
+            </View>
+            <Switch
+              value={isDarkMode}
+              onValueChange={user.toggleDarkMode}
+              trackColor={{ false: colors.line, true: colors.signal }}
+              thumbColor="#ffffff"
+            />
+          </View>
+
+          {/* Language Toggle */}
+          <View style={[styles.prefRow, { borderTopWidth: 1, borderTopColor: colors.line, paddingTop: 12 }]}>
+            <View>
+              <Text style={[styles.prefTitle, { color: colors.ink }]}>Language / भाषा</Text>
+              <Text style={[styles.prefSub, { color: colors.muted }]}>
+                {user.language === 'en' ? 'English' : 'हिंदी (Hindi)'}
+              </Text>
+            </View>
+            <TouchableOpacity
+              onPress={() => user.setLanguage(user.language === 'en' ? 'hi' : 'en')}
+              style={[styles.langBtn, { backgroundColor: colors.surfaceSubtle, borderColor: colors.line }]}
+            >
+              <Globe size={14} color={colors.signal} />
+              <Text style={[styles.langBtnText, { color: colors.signal }]}>
+                {user.language === 'en' ? 'हिंदी' : 'English'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* Reset All Local Data Button */}
+        <TouchableOpacity
+          onPress={handleResetDefaults}
+          style={[styles.resetBtn, { borderColor: colors.line }]}
+        >
+          <RotateCcw size={14} color={colors.muted} />
+          <Text style={[styles.resetBtnText, { color: colors.muted }]}>Reset to Initial Demo Data</Text>
+        </TouchableOpacity>
+      </ScrollView>
+
+      {/* Modal: Add or Edit Trusted Contact */}
+      <Modal visible={contactModalOpen} transparent animationType="slide">
+        <View style={styles.modalBackdrop}>
+          <View style={[styles.modalCard, { backgroundColor: colors.surface, borderColor: colors.line }]}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: colors.ink }]}>
                 {editingContactId ? 'Edit Trusted Contact' : 'Add Trusted Contact'}
               </Text>
+              <TouchableOpacity onPress={() => setContactModalOpen(false)}>
+                <X size={20} color={colors.muted} />
+              </TouchableOpacity>
+            </View>
 
-              <Text style={[styles.inputLabel, { color: colors.muted }]}>Contact Name</Text>
+            <ScrollView showsVerticalScrollIndicator={false}>
+              <Text style={[styles.inputLabel, { color: colors.muted }]}>Name</Text>
               <TextInput
-                placeholder="Full Name (e.g., Mom, Priya)"
-                placeholderTextColor={colors.muted}
                 value={contactName}
                 onChangeText={setContactName}
-                style={[styles.input, { backgroundColor: colors.surface, color: colors.ink, borderColor: colors.line }]}
+                placeholder="Contact Name (e.g., Priya Singh)"
+                placeholderTextColor={colors.muted}
+                style={[styles.input, { backgroundColor: colors.surfaceSubtle, color: colors.ink, borderColor: colors.line }]}
               />
 
-              <Text style={[styles.inputLabel, { color: colors.muted }]}>Phone Number (for SMS Alerts)</Text>
+              <Text style={[styles.inputLabel, { color: colors.muted }]}>Phone Number (Receives SMS Alerts)</Text>
               <TextInput
-                placeholder="Phone (+91 98111 22233)"
-                placeholderTextColor={colors.muted}
                 value={contactPhone}
                 onChangeText={setContactPhone}
+                placeholder="+91 98765 43210"
+                placeholderTextColor={colors.muted}
                 keyboardType="phone-pad"
-                style={[styles.input, { backgroundColor: colors.surface, color: colors.ink, borderColor: colors.line }]}
+                style={[styles.input, { backgroundColor: colors.surfaceSubtle, color: colors.ink, borderColor: colors.line }]}
               />
 
-              <Text style={[styles.inputLabel, { color: colors.muted }]}>Email Address (for Email Alerts)</Text>
+              <Text style={[styles.inputLabel, { color: colors.muted }]}>Email Address (Receives Email Alerts)</Text>
               <TextInput
-                placeholder="Email (e.g., priya@example.com)"
-                placeholderTextColor={colors.muted}
                 value={contactEmail}
                 onChangeText={setContactEmail}
+                placeholder="contact@example.com"
+                placeholderTextColor={colors.muted}
                 keyboardType="email-address"
                 autoCapitalize="none"
-                style={[styles.input, { backgroundColor: colors.surface, color: colors.ink, borderColor: colors.line }]}
+                style={[styles.input, { backgroundColor: colors.surfaceSubtle, color: colors.ink, borderColor: colors.line }]}
               />
 
               <Text style={[styles.inputLabel, { color: colors.muted }]}>Relationship</Text>
-              <View style={styles.relationPills}>
-                {['Parent', 'Spouse', 'Friend', 'Sibling', 'Colleague'].map((rel) => (
+              <View style={styles.relationPillsRow}>
+                {['Parent', 'Sibling', 'Spouse', 'Friend', 'Colleague'].map((rel) => (
                   <TouchableOpacity
                     key={rel}
                     onPress={() => setContactRelation(rel)}
                     style={[
-                      styles.relationPill,
+                      styles.relPill,
                       {
-                        backgroundColor: contactRelation === rel ? colors.ink : colors.surface,
-                        borderColor: contactRelation === rel ? colors.ink : colors.line,
+                        backgroundColor: contactRelation === rel ? colors.signal : colors.surfaceSubtle,
+                        borderColor: contactRelation === rel ? colors.signal : colors.line,
                       },
                     ]}
                   >
-                    <Text style={{ color: contactRelation === rel ? '#ffffff' : colors.ink, fontSize: 11, fontWeight: '700' }}>
+                    <Text
+                      style={[
+                        styles.relPillText,
+                        { color: contactRelation === rel ? '#ffffff' : colors.ink },
+                      ]}
+                    >
                       {rel}
                     </Text>
                   </TouchableOpacity>
                 ))}
               </View>
 
-              {/* Notification Toggle Row */}
-              <View style={styles.switchRow}>
-                <Text style={[styles.switchLabel, { color: colors.ink }]}>Send SOS via SMS</Text>
-                <Switch
-                  value={contactNotifySms}
-                  onValueChange={setContactNotifySms}
-                  trackColor={{ false: colors.line, true: colors.signal }}
-                />
+              <View style={styles.notifyTogglesRow}>
+                <View style={styles.notifyToggleItem}>
+                  <Text style={[styles.notifyToggleText, { color: colors.ink }]}>SMS Alert</Text>
+                  <Switch
+                    value={contactNotifySms}
+                    onValueChange={setContactNotifySms}
+                    trackColor={{ false: colors.line, true: colors.safe }}
+                  />
+                </View>
+
+                <View style={styles.notifyToggleItem}>
+                  <Text style={[styles.notifyToggleText, { color: colors.ink }]}>Email Alert</Text>
+                  <Switch
+                    value={contactNotifyEmail}
+                    onValueChange={setContactNotifyEmail}
+                    trackColor={{ false: colors.line, true: colors.signal }}
+                  />
+                </View>
               </View>
 
-              <View style={styles.switchRow}>
-                <Text style={[styles.switchLabel, { color: colors.ink }]}>Send SOS via Email</Text>
-                <Switch
-                  value={contactNotifyEmail}
-                  onValueChange={setContactNotifyEmail}
-                  trackColor={{ false: colors.line, true: colors.signal }}
-                />
-              </View>
-
-              <View style={styles.formBtnRow}>
-                <TouchableOpacity
-                  onPress={() => setContactModalOpen(false)}
-                  style={[styles.formCancelBtn, { borderColor: colors.line }]}
-                >
-                  <Text style={{ color: colors.muted, fontWeight: '600' }}>Cancel</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  onPress={handleSaveContact}
-                  style={[styles.formSaveBtn, { backgroundColor: colors.signal }]}
-                >
-                  <Text style={{ color: '#ffffff', fontWeight: '700' }}>
-                    {editingContactId ? 'Update Contact' : 'Save Contact'}
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          )}
-        </View>
-
-        {/* Section 4: Safety Code (Normal PIN) & Silent Duress PIN */}
-        <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.line }]}>
-          <View style={styles.cardHeaderLeft}>
-            <Lock size={18} color={colors.signal} />
-            <Text style={[styles.cardTitle, { color: colors.ink }]}>Safety Code & Security PINs</Text>
-          </View>
-
-          <Text style={[styles.cardExplainer, { color: colors.muted }]}>
-            Your 4-digit Safety Code is required to dismiss the anomaly countdown before the timer sends an SOS.
-            The Duress PIN silently alerts police and contacts under coercion.
-          </Text>
-
-          <View style={styles.pinInputsRow}>
-            <View style={styles.pinInputCol}>
-              <Text style={[styles.pinLabel, { color: colors.ink }]}>Safety Code (Normal PIN)</Text>
-              <TextInput
-                value={normalPin}
-                onChangeText={setNormalPin}
-                keyboardType="numeric"
-                maxLength={4}
-                secureTextEntry
-                style={[styles.pinInput, { backgroundColor: colors.surfaceSubtle, color: colors.ink, borderColor: colors.line }]}
-              />
-              <Text style={[styles.pinHint, { color: colors.muted }]}>Cancels anomaly alert</Text>
-            </View>
-
-            <View style={styles.pinInputCol}>
-              <Text style={[styles.pinLabel, { color: colors.danger }]}>Silent Duress PIN</Text>
-              <TextInput
-                value={duressPin}
-                onChangeText={setDuressPin}
-                keyboardType="numeric"
-                maxLength={4}
-                secureTextEntry
-                style={[styles.pinInput, { backgroundColor: colors.dangerSubtle, color: colors.danger, borderColor: colors.danger }]}
-              />
-              <Text style={[styles.pinHint, { color: colors.danger }]}>Silently sends SOS</Text>
-            </View>
-          </View>
-
-          <TouchableOpacity
-            onPress={handleSavePins}
-            style={[styles.savePinsBtn, { backgroundColor: colors.signal }]}
-          >
-            <Text style={styles.savePinsText}>Save Security PINs to Storage</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Section 5: App Preferences (Language, Theme) */}
-        <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.line }]}>
-          <Text style={[styles.cardTitle, { color: colors.ink, marginBottom: 14 }]}>App Preferences</Text>
-
-          {/* Language Switch */}
-          <View style={styles.settingRow}>
-            <View style={styles.settingLabelWrap}>
-              <Globe size={16} color={colors.muted} />
-              <Text style={[styles.settingLabel, { color: colors.ink }]}>Language / भाषा</Text>
-            </View>
-            <View style={styles.timeoutPills}>
               <TouchableOpacity
-                onPress={() => user.setLanguage('en')}
-                style={[styles.timeoutPill, { backgroundColor: lang === 'en' ? colors.ink : colors.surfaceSubtle }]}
+                onPress={handleSaveContact}
+                style={[styles.saveBtn, { backgroundColor: colors.signal, marginTop: 16 }]}
               >
-                <Text style={{ color: lang === 'en' ? '#ffffff' : colors.ink, fontSize: 12, fontWeight: '700' }}>
-                  English
+                <CheckCircle2 size={16} color="#ffffff" />
+                <Text style={styles.saveBtnText}>
+                  {editingContactId ? 'Update Contact' : 'Save Contact'}
                 </Text>
               </TouchableOpacity>
-              <TouchableOpacity
-                onPress={() => user.setLanguage('hi')}
-                style={[styles.timeoutPill, { backgroundColor: lang === 'hi' ? colors.ink : colors.surfaceSubtle }]}
-              >
-                <Text style={{ color: lang === 'hi' ? '#ffffff' : colors.ink, fontSize: 12, fontWeight: '700' }}>
-                  हिंदी
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-
-          <View style={[styles.divider, { backgroundColor: colors.line }]} />
-
-          {/* Dark Mode */}
-          <View style={styles.settingRow}>
-            <View style={styles.settingLabelWrap}>
-              <Moon size={16} color={colors.muted} />
-              <Text style={[styles.settingLabel, { color: colors.ink }]}>Dark Theme</Text>
-            </View>
-            <Switch
-              value={user.isDarkMode}
-              onValueChange={user.toggleDarkMode}
-              trackColor={{ false: colors.line, true: colors.signal }}
-              thumbColor="#ffffff"
-            />
+            </ScrollView>
           </View>
         </View>
-
-        {/* Section 6: Reset / Restore */}
-        <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.line }]}>
-          <Text style={[styles.cardTitle, { color: colors.ink, marginBottom: 8 }]}>Storage & Diagnostics</Text>
-          <Text style={[styles.privacyNotice, { color: colors.muted }]}>
-            All customizations are stored on your local device. You can reset to standard Delhi defaults at any time.
-          </Text>
-
-          <TouchableOpacity
-            onPress={handleResetDefaults}
-            style={[styles.resetDefaultsBtn, { borderColor: colors.line }]}
-          >
-            <RotateCcw size={15} color={colors.muted} />
-            <Text style={[styles.resetDefaultsText, { color: colors.muted }]}>Reset to Demo Defaults</Text>
-          </TouchableOpacity>
-        </View>
-      </ScrollView>
+      </Modal>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
+  container: {
+    flex: 1,
+  },
   header: {
     paddingHorizontal: 20,
     paddingVertical: 14,
@@ -883,57 +705,62 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderBottomWidth: 1,
   },
-  title: { fontSize: 20, fontWeight: '800' },
-  sub: { fontSize: 12, marginTop: 2 },
-  headerAvatar: { width: 42, height: 42, borderRadius: 21 },
-  headerAvatarPlaceholder: { width: 42, height: 42, borderRadius: 21, justifyContent: 'center', alignItems: 'center' },
-  googleBadgePill: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 10 },
-  googleBadgeText: { fontSize: 10, fontWeight: '800', color: '#1a73e8' },
-  switchAccountHeaderBtn: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, borderWidth: 1, justifyContent: 'center', alignItems: 'center' },
-  switchAccountHeaderText: { fontSize: 12, fontWeight: '700' },
-  headerBtnGroup: { flexDirection: 'row', gap: 8, alignItems: 'center' },
-  authStatusBanner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 10, borderRadius: 8, borderWidth: 1, marginBottom: 12 },
-  authStatusTitle: { fontSize: 12, fontWeight: '800' },
-  authStatusSub: { fontSize: 11, marginTop: 1 },
-  switchAuthBtn: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 6, borderWidth: 1 },
-  switchAuthText: { fontSize: 11, fontWeight: '700' },
-  authActionBtnRow: { flexDirection: 'row', gap: 8, marginTop: 14 },
-  accountOptionBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 8, borderRadius: 8, borderWidth: 1 },
-  accountOptionText: { fontSize: 11, fontWeight: '700' },
-  guidedDemoBtn: {
+  headerAvatarPlaceholder: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  title: {
+    fontSize: 18,
+    fontWeight: '800',
+  },
+  sub: {
+    fontSize: 12,
+    marginTop: 2,
+  },
+  headerActionBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
     paddingHorizontal: 12,
-    paddingVertical: 7,
+    paddingVertical: 6,
     borderRadius: 8,
   },
-  guidedDemoText: { color: '#ffffff', fontSize: 12, fontWeight: '700' },
-  scrollBody: { padding: 18, paddingBottom: 50 },
+  headerActionText: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  scrollBody: {
+    padding: 16,
+    paddingBottom: 40,
+    gap: 16,
+  },
   storageBadgeBanner: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    borderWidth: 1,
+    gap: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
     borderRadius: 10,
-    padding: 10,
-    marginBottom: 14,
-  },
-  storageBadgeText: { fontSize: 11, fontWeight: '600', flex: 1, lineHeight: 16 },
-  alertLogBanner: {
-    padding: 14,
-    borderRadius: themeTokens.radii.card,
     borderWidth: 1,
-    marginBottom: 16,
   },
-  alertLogIconText: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  alertLogTitle: { fontSize: 14, fontWeight: '700' },
-  alertLogSub: { fontSize: 12, marginTop: 2 },
+  storageBadgeText: {
+    flex: 1,
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: '600',
+  },
   card: {
-    padding: 18,
     borderRadius: themeTokens.radii.card,
     borderWidth: 1,
-    marginBottom: 16,
+    padding: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
   },
   cardHeaderRow: {
     flexDirection: 'row',
@@ -941,31 +768,68 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 8,
   },
-  cardHeaderLeft: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  cardTitle: { fontSize: 16, fontWeight: '700' },
-  cardExplainer: { fontSize: 12, lineHeight: 18, marginTop: 4, marginBottom: 14 },
+  cardHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  cardTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  cardExplainer: {
+    fontSize: 12,
+    lineHeight: 17,
+    marginTop: 4,
+    marginBottom: 12,
+  },
   smallActionBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 5,
     paddingHorizontal: 10,
-    paddingVertical: 4,
+    paddingVertical: 5,
     borderRadius: 6,
   },
-  smallActionText: { fontSize: 12, fontWeight: '700' },
-  profileSummaryRow: { marginTop: 6, gap: 8 },
-  profileDataCol: { marginBottom: 4 },
-  profileLabel: { fontSize: 11, textTransform: 'uppercase', fontWeight: '700' },
-  profileValue: { fontSize: 14, fontWeight: '600', marginTop: 1 },
-  editProfileForm: { marginTop: 6 },
-  inputLabel: { fontSize: 11, fontWeight: '700', marginBottom: 4, textTransform: 'uppercase' },
+  smallActionText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  profileSummaryRow: {
+    flexDirection: 'column',
+    gap: 10,
+    marginTop: 6,
+  },
+  profileDataCol: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 4,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(128,128,128,0.1)',
+  },
+  profileLabel: {
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  profileValue: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  editProfileForm: {
+    marginTop: 6,
+  },
+  inputLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    marginBottom: 4,
+    marginTop: 8,
+  },
   input: {
-    paddingHorizontal: 12,
-    paddingVertical: 9,
     borderRadius: 8,
     borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
     fontSize: 13,
-    marginBottom: 10,
   },
   saveBtn: {
     flexDirection: 'row',
@@ -974,115 +838,250 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingVertical: 10,
     borderRadius: 8,
-    marginTop: 4,
+    marginTop: 14,
   },
-  saveBtnText: { color: '#ffffff', fontWeight: '700', fontSize: 13 },
-  timerPillsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 },
-  timerPill: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 8, borderWidth: 1 },
-  customTimerRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
-  customTimerLabel: { fontSize: 13, fontWeight: '600' },
-  customTimerInput: {
-    width: 70,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 6,
-    borderWidth: 1,
-    textAlign: 'center',
-    fontSize: 14,
+  saveBtnText: {
+    color: '#ffffff',
+    fontSize: 13,
     fontWeight: '700',
   },
-  customTimerBtn: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 6, borderWidth: 1 },
-  customTimerBtnText: { fontSize: 12, fontWeight: '700' },
-  simulateAnomalyBtn: {
+  timerPillsRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    paddingVertical: 9,
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 12,
+  },
+  timerPill: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
     borderRadius: 8,
     borderWidth: 1,
-    marginTop: 4,
   },
-  simulateAnomalyText: { fontSize: 12, fontWeight: '700' },
-  addBtnSmall: {
+  timerPillText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  customTimerRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    justifyContent: 'space-between',
+    marginTop: 4,
+  },
+  customTimerLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  customTimerInputGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  customTimerInput: {
+    width: 64,
+    textAlign: 'center',
+    borderRadius: 6,
+    borderWidth: 1,
+    paddingVertical: 4,
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  customTimerSaveBtn: {
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 6,
   },
-  addBtnText: { color: '#ffffff', fontSize: 12, fontWeight: '700' },
-  contactCardItem: {
-    padding: 12,
+  customTimerSaveBtnText: {
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  addContactBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 6,
+  },
+  addContactBtnText: {
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  contactCard: {
     borderRadius: 10,
     borderWidth: 1,
+    padding: 12,
     marginBottom: 10,
   },
-  contactHeaderLine: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
-  contactName: { fontSize: 14, fontWeight: '700' },
-  contactMeta: { fontSize: 12, marginTop: 2 },
-  contactEmail: { fontSize: 11, marginTop: 2, fontWeight: '600' },
-  contactActions: { flexDirection: 'row', gap: 6 },
-  iconActionBtn: {
-    width: 32,
-    height: 32,
+  contactInfoRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  contactTextCol: {
+    flex: 1,
+    paddingRight: 8,
+  },
+  contactNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 4,
+  },
+  contactName: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  relationBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    borderWidth: 1,
+  },
+  relationText: {
+    fontSize: 10,
+    fontWeight: '600',
+  },
+  contactPhone: {
+    fontSize: 12,
+  },
+  contactEmail: {
+    fontSize: 12,
+    marginTop: 2,
+  },
+  channelsRow: {
+    flexDirection: 'row',
+    gap: 6,
+    marginTop: 8,
+  },
+  channelChip: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
     borderRadius: 6,
-    justifyContent: 'center',
+  },
+  channelChipText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  contactActionsCol: {
+    flexDirection: 'row',
+    gap: 8,
     alignItems: 'center',
   },
-  badgeRow: { flexDirection: 'row', gap: 8, marginTop: 8 },
-  channelBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 4 },
-  channelBadgeText: { fontSize: 10, fontWeight: '700' },
-  addContactForm: {
-    padding: 14,
-    borderRadius: 12,
-    borderWidth: 1,
-    marginTop: 12,
+  contactIconBtn: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  formHeading: { fontSize: 14, fontWeight: '800', marginBottom: 12 },
-  relationPills: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 12 },
-  relationPill: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 6, borderWidth: 1 },
-  switchRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 6 },
-  switchLabel: { fontSize: 13, fontWeight: '600' },
-  formBtnRow: { flexDirection: 'row', justifyContent: 'flex-end', gap: 8, marginTop: 12 },
-  formCancelBtn: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 6, borderWidth: 1 },
-  formSaveBtn: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 6 },
-  pinInputsRow: { flexDirection: 'row', gap: 16, marginTop: 4, marginBottom: 12 },
-  pinInputCol: { flex: 1 },
-  pinLabel: { fontSize: 12, fontWeight: '700', marginBottom: 4 },
+  pinsFormRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  pinFieldCol: {
+    flex: 1,
+  },
   pinInput: {
-    paddingVertical: 10,
-    textAlign: 'center',
     borderRadius: 8,
     borderWidth: 1,
-    fontSize: 20,
-    fontWeight: '800',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    fontSize: 14,
+    fontWeight: '700',
+    textAlign: 'center',
     letterSpacing: 4,
   },
-  pinHint: { fontSize: 10, marginTop: 4, textAlign: 'center' },
-  savePinsBtn: { paddingVertical: 10, borderRadius: 8, alignItems: 'center' },
-  savePinsText: { color: '#ffffff', fontSize: 13, fontWeight: '700' },
-  settingRow: {
+  prefRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 8,
+    paddingVertical: 6,
   },
-  settingLabelWrap: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  settingLabel: { fontSize: 14, fontWeight: '600' },
-  timeoutPills: { flexDirection: 'row', gap: 6 },
-  timeoutPill: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 6 },
-  divider: { height: 1, marginVertical: 6 },
-  privacyNotice: { fontSize: 12, lineHeight: 18, marginBottom: 14 },
-  resetDefaultsBtn: {
+  prefTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  prefSub: {
+    fontSize: 11,
+    marginTop: 2,
+  },
+  langBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 10,
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
     borderRadius: 8,
     borderWidth: 1,
   },
-  resetDefaultsText: { fontSize: 12, fontWeight: '700' },
+  langBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  resetBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  resetBtnText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    justifyContent: 'center',
+    padding: 20,
+  },
+  modalCard: {
+    borderRadius: 16,
+    borderWidth: 1,
+    padding: 20,
+    maxHeight: '85%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  modalTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  relationPillsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginBottom: 12,
+  },
+  relPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 6,
+    borderWidth: 1,
+  },
+  relPillText: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  notifyTogglesRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    marginVertical: 10,
+  },
+  notifyToggleItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  notifyToggleText: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
 });
