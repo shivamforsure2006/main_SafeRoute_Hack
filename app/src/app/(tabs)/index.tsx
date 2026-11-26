@@ -89,6 +89,7 @@ export default function MapScreen() {
   const [isSearching, setIsSearching] = useState(false);
   const [breakdownRoute, setBreakdownRoute] = useState<RouteAlternative | null>(null);
   const [hudCollapsed, setHudCollapsed] = useState(false);
+  const [isSheetExpanded, setIsSheetExpanded] = useState(false);
 
   // Activate hardware accelerometer shake detection
   useShakeDetection();
@@ -627,8 +628,39 @@ export default function MapScreen() {
             /* Full Trip HUD */
             <TripHUD />
           )
+        ) : !isSheetExpanded ? (
+          /* Compact Docked Route Pill - Gives 75% Page Area Directly to Map */
+          <View style={styles.compactDockRow}>
+            <TouchableOpacity
+              onPress={() => setIsSheetExpanded(true)}
+              style={styles.compactRouteMeta}
+              accessibilityRole="button"
+              accessibilityLabel="Expand route alternatives"
+            >
+              <View>
+                <Text style={[styles.compactRouteTitle, { color: colors.ink }]} numberOfLines={1}>
+                  {selectedRoute?.title || 'Safest Route'} ({selectedRoute?.safety_score ?? 88}/100)
+                </Text>
+                <Text style={[styles.compactRouteSub, { color: colors.muted }]}>
+                  {routes.length} paths • {durationMin} min • {distanceKm} km • Tap to compare ▴
+                </Text>
+              </View>
+            </TouchableOpacity>
+
+            {selectedRoute && (
+              <TouchableOpacity
+                onPress={startTrip}
+                style={[styles.startTripBtn, { backgroundColor: colors.signal }]}
+                accessibilityRole="button"
+                accessibilityLabel="Start safe journey"
+              >
+                <Text style={styles.startTripText}>{t.start_trip}</Text>
+                <ArrowRight size={15} color="#ffffff" />
+              </TouchableOpacity>
+            )}
+          </View>
         ) : (
-          /* Route Comparison Drawer */
+          /* Expanded Route Comparison Drawer */
           <View>
             <View style={styles.sheetHeader}>
               <View>
@@ -638,17 +670,26 @@ export default function MapScreen() {
                 </Text>
               </View>
 
-              {selectedRoute && (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                 <TouchableOpacity
-                  onPress={startTrip}
-                  style={[styles.startTripBtn, { backgroundColor: colors.ink }]}
-                  accessibilityRole="button"
-                  accessibilityLabel="Start safe journey"
+                  onPress={() => setIsSheetExpanded(false)}
+                  style={[styles.collapseSheetBtn, { borderColor: colors.line }]}
                 >
-                  <Text style={styles.startTripText}>{t.start_trip}</Text>
-                  <ArrowRight size={16} color="#ffffff" />
+                  <Text style={[styles.collapseSheetText, { color: colors.muted }]}>Map View ▾</Text>
                 </TouchableOpacity>
-              )}
+
+                {selectedRoute && (
+                  <TouchableOpacity
+                    onPress={startTrip}
+                    style={[styles.startTripBtn, { backgroundColor: colors.signal }]}
+                    accessibilityRole="button"
+                    accessibilityLabel="Start safe journey"
+                  >
+                    <Text style={styles.startTripText}>{t.start_trip}</Text>
+                    <ArrowRight size={15} color="#ffffff" />
+                  </TouchableOpacity>
+                )}
+              </View>
             </View>
 
             <ScrollView style={styles.routesScroll} showsVerticalScrollIndicator={false}>
@@ -683,11 +724,14 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   topControls: {
-    paddingTop: 8,
+    // 20% area of the total page
+    height: '20%',
+    paddingTop: 6,
     paddingHorizontal: 14,
-    paddingBottom: 8,
+    paddingBottom: 6,
     borderBottomWidth: 1,
     zIndex: 50,
+    justifyContent: 'space-between',
   },
   navHeaderCard: {
     borderRadius: 14,
@@ -937,8 +981,38 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   mapContainer: {
+    // 75% of the total page area!
+    height: '75%',
     flex: 1,
     position: 'relative',
+  },
+  compactDockRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 4,
+    gap: 12,
+  },
+  compactRouteMeta: {
+    flex: 1,
+  },
+  compactRouteTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  compactRouteSub: {
+    fontSize: 11,
+    marginTop: 2,
+  },
+  collapseSheetBtn: {
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 6,
+    borderWidth: 1,
+  },
+  collapseSheetText: {
+    fontSize: 11,
+    fontWeight: '600',
   },
   simulatorWrapper: {
     position: 'absolute',

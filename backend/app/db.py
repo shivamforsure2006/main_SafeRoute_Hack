@@ -2,11 +2,22 @@ from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sess
 from sqlalchemy.orm import declarative_base
 from backend.app.config import settings
 
-# Async SQLite engine
+# Format Database URL for Async SQLAlchemy
+raw_db_url = settings.DATABASE_URL or "sqlite+aiosqlite:///./saferoute.db"
+
+# Automatically normalize postgres / postgresql URLs to asyncpg for Supabase / Neon / Render
+if raw_db_url.startswith("postgres://"):
+    async_db_url = raw_db_url.replace("postgres://", "postgresql+asyncpg://", 1)
+elif raw_db_url.startswith("postgresql://") and not raw_db_url.startswith("postgresql+asyncpg://"):
+    async_db_url = raw_db_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+else:
+    async_db_url = raw_db_url
+
+# Async database engine (supports SQLite and hosted PostgreSQL)
 engine = create_async_engine(
-    settings.DATABASE_URL,
+    async_db_url,
     echo=False,
-    connect_args={"check_same_thread": False} if "sqlite" in settings.DATABASE_URL else {}
+    connect_args={"check_same_thread": False} if "sqlite" in async_db_url else {}
 )
 
 AsyncSessionLocal = async_sessionmaker(

@@ -26,9 +26,20 @@ class Settings(BaseSettings):
     
     # External APIs (Optional - fallbacks provided)
     ORS_API_KEY: Optional[str] = os.getenv("ORS_API_KEY", None)
+    
+    # SMS: Twilio (Free trial credit) or Fast2SMS (Free trial wallet in India)
     TWILIO_ACCOUNT_SID: Optional[str] = os.getenv("TWILIO_ACCOUNT_SID", None)
     TWILIO_AUTH_TOKEN: Optional[str] = os.getenv("TWILIO_AUTH_TOKEN", None)
     TWILIO_FROM_PHONE: Optional[str] = os.getenv("TWILIO_FROM_PHONE", "+1234567890")
+    FAST2SMS_API_KEY: Optional[str] = os.getenv("FAST2SMS_API_KEY", None)
+    
+    # Email: Free Gmail SMTP (App Password) or Resend (Free 3000 emails/month)
+    SMTP_HOST: str = os.getenv("SMTP_HOST", "smtp.gmail.com")
+    SMTP_PORT: int = int(os.getenv("SMTP_PORT", "587"))
+    SMTP_USER: Optional[str] = os.getenv("SMTP_USER", None)
+    SMTP_PASSWORD: Optional[str] = os.getenv("SMTP_PASSWORD", None) # Gmail App Password
+    SMTP_FROM_EMAIL: Optional[str] = os.getenv("SMTP_FROM_EMAIL", None)
+    RESEND_API_KEY: Optional[str] = os.getenv("RESEND_API_KEY", None)
     
     # Safety Engine Weights (Required in one config)
     WEIGHT_LIGHTING: float = 0.30

@@ -16,6 +16,7 @@ export function CheckInModal() {
 
   const isDarkMode = useUserStore((s) => s.isDarkMode);
   const contacts = useUserStore((s) => s.contacts);
+  const normalPin = useUserStore((s) => s.normalPin);
   const colors = isDarkMode ? darkColors : lightColors;
 
   const [enteredPin, setEnteredPin] = useState('');
@@ -196,6 +197,17 @@ export function CheckInModal() {
             )}
           </View>
 
+          {/* Quick Safe Dismiss Button */}
+          <TouchableOpacity
+            onPress={() => verifyPin(normalPin)}
+            style={[styles.safeDismissBtn, { backgroundColor: colors.safe }]}
+            accessibilityRole="button"
+            accessibilityLabel="I am safe. Stop countdown and resume trip."
+          >
+            <Check size={18} color="#ffffff" />
+            <Text style={styles.safeDismissBtnText}>I Am Safe — Stop Alert (Resume Trip)</Text>
+          </TouchableOpacity>
+
           {/* Immediate SOS Button */}
           <TouchableOpacity
             onPress={() => triggerSOS('CHECK_IN_IMMEDIATE_HELP')}
@@ -336,6 +348,21 @@ const styles = StyleSheet.create({
   },
   keypadBtnText: {
     fontSize: 20,
+    fontWeight: '700',
+  },
+  safeDismissBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    width: '100%',
+    paddingVertical: 12,
+    borderRadius: 12,
+    marginTop: 12,
+  },
+  safeDismissBtnText: {
+    color: '#ffffff',
+    fontSize: 14,
     fontWeight: '700',
   },
   emergencyHelpBtn: {

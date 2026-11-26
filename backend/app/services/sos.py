@@ -97,6 +97,23 @@ class SOSService:
                     channel="WHATSAPP",
                     title="EMERGENCY SOS"
                 )
+            if getattr(c, 'email', None) and getattr(c, 'notify_email', True):
+                email_subject = f"EMERGENCY SOS ALERT: {user_name} needs help in Delhi NCR"
+                email_body = (
+                    f"EMERGENCY SOS ALERT\n\n"
+                    f"{user_name} has triggered an emergency SOS alert in Delhi NCR.\n"
+                    f"Reason / Anomaly: {trigger_type}\n"
+                    f"Last Known Location: ({round(lat, 4)}, {round(lng, 4)})\n"
+                    f"Device Battery: {battery_level}%\n\n"
+                    f"LIVE GPS TRACKING LINK:\n{tracking_url}\n\n"
+                    f"If you cannot reach {user_name}, please dial Delhi Emergency 112 immediately."
+                )
+                await notification_service.send_email(
+                    db=db,
+                    recipient_email=c.email,
+                    subject=email_subject,
+                    body_text=email_body
+                )
 
         # 2. Alert Nearby Active Volunteers within 1000m (1 km)
         volunteers_res = await db.execute(

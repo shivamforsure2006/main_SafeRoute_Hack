@@ -64,8 +64,8 @@ export default function GuidedDemoScreen() {
         'The anomaly engine detects a 260m perpendicular route deviation off the safe path. The app promotes from NORMAL to CHECK_IN, initiating the 30-second escalating countdown ring.',
       actionLabel: 'Simulate Check-In Timeout',
       action: () => {
-        // Trigger SOS escalation
-        trip.triggerSOS('CHECK_IN_TIMEOUT_ESCALATION');
+        // Trigger check-in countdown modal with user's configured timer
+        trip.triggerCheckIn('Route deviation detected: 260m off planned safe route');
         setCurrentStep(4);
       },
     },
